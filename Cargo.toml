@@ -12,3 +12,4 @@ categories = ["data-structures"]
 keywords = ["ordered", "set", "map", "custom", "order"]
 
 [dependencies]
+uuid = "1.3"
