@@ -1,4 +1,6 @@
-//! A segmented [`Path`] safe to use as a filesystem [`std::path::Path`] or in an HTTP [`Link`](`crate::link::Link`).
+//! A segmented [`Path`] safe to use as a filesystem [`std::path::Path`] or in a URL.
+//!
+//! This module also provides an HTTP [`Link`](`crate::path::Link`) for use with [`Path`].
 
 use std::ops::{Deref, DerefMut};
 

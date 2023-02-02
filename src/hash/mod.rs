@@ -1,3 +1,5 @@
+//! Hash-based collection types
+
 pub mod collection;
 pub mod map;
 pub mod set;
