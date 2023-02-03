@@ -9,7 +9,7 @@
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::ops::{Deref, DerefMut, Index, IndexMut, RangeBounds};
+use std::ops::{Bound, Deref, DerefMut, Index, IndexMut, RangeBounds};
 
 macro_rules! assert_bounds {
     ($i:expr, $len:expr) => {
@@ -92,8 +92,8 @@ impl<T> DoubleEndedIterator for IntoIter<T> {
 /// An iterator over the elements of a [`List`]
 pub struct Iter<'a, T> {
     inner: &'a HashMap<usize, Node<T>>,
-    next: Option<&'a usize>,
-    stop: Option<&'a usize>,
+    next: Option<usize>,
+    stop: Option<usize>,
 }
 
 impl<'a, T> Iterator for Iter<'a, T> {
@@ -101,12 +101,12 @@ impl<'a, T> Iterator for Iter<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.next?;
-        let node = self.inner.get(next).expect("next");
+        let node = self.inner.get(&next).expect("next");
 
         self.next = if self.stop == Some(next) {
             None
         } else {
-            node.next.as_ref()
+            node.next
         };
 
         if self.next.is_none() {
@@ -120,12 +120,12 @@ impl<'a, T> Iterator for Iter<'a, T> {
 impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         let next = self.stop?;
-        let node = self.inner.get(next).expect("next");
+        let node = self.inner.get(&next).expect("next");
 
         self.stop = if self.next == Some(next) {
             None
         } else {
-            node.prev.as_ref()
+            node.prev
         };
 
         if self.stop.is_none() {
@@ -153,12 +153,14 @@ impl<T> List<T> {
 
     /// Borrow the last element in this [`List`], if any.
     pub fn back(&self) -> Option<&T> {
-        self.inner.get(&Self::MAX_LEN).map(Deref::deref)
+        let ordinal = if self.len() == 1 { 0 } else { Self::MAX_LEN };
+        self.inner.get(&ordinal).map(Deref::deref)
     }
 
     /// Borrow the last element in this [`List`], if any.
     pub fn back_mut(&mut self) -> Option<&mut T> {
-        self.inner.get_mut(&Self::MAX_LEN).map(DerefMut::deref_mut)
+        let ordinal = if self.len() == 1 { 0 } else { Self::MAX_LEN };
+        self.inner.get_mut(&ordinal).map(DerefMut::deref_mut)
     }
 
     /// Remove all elements from this [`List`].
@@ -243,10 +245,17 @@ impl<T> List<T> {
 
     /// Iterate over all elements in this [`List`].
     pub fn iter(&self) -> Iter<T> {
+        let next = if self.is_empty() { None } else { Some(0) };
+        let stop = if self.len() == 1 {
+            Some(0)
+        } else {
+            Some(Self::MAX_LEN)
+        };
+
         Iter {
             inner: &self.inner,
-            next: self.inner.keys().next(),
-            stop: self.inner.keys().last(),
+            next,
+            stop,
         }
     }
 
@@ -262,7 +271,39 @@ impl<T> List<T> {
 
     /// Iterate over the given `range` of elements in this [`List`].
     pub fn range<R: RangeBounds<usize>>(&self, range: R) -> Iter<T> {
-        todo!()
+        if self.is_empty() {
+            return Iter {
+                inner: &self.inner,
+                next: None,
+                stop: None,
+            };
+        }
+
+        let next = match range.start_bound() {
+            Bound::Unbounded => Some(0),
+            Bound::Included(start) => Some(self.ordinal(*start)),
+            Bound::Excluded(start) => {
+                let ordinal = self.ordinal(*start);
+                self.inner.get(&ordinal).expect("node").next
+            }
+        };
+
+        let last_ordinal = if self.len() == 1 { 0 } else { Self::MAX_LEN };
+
+        let stop = match range.end_bound() {
+            Bound::Unbounded => Some(last_ordinal),
+            Bound::Included(end) => Some(self.ordinal(*end)),
+            Bound::Excluded(end) => {
+                let ordinal = self.ordinal(*end);
+                self.inner.get(&ordinal).expect("node").prev
+            }
+        };
+
+        Iter {
+            inner: &self.inner,
+            next,
+            stop,
+        }
     }
 
     /// Remove and return the value at the given `index`, if any.
@@ -314,7 +355,19 @@ impl<T> List<T> {
     }
 
     fn ordinal(&self, cardinal: usize) -> usize {
-        bisect_left(&self.inner, self.len(), 0, Self::MAX_LEN, cardinal)
+        assert_bounds!(cardinal, self.len());
+
+        if cardinal == 0 {
+            0
+        } else if cardinal == self.len() - 1 {
+            if self.len() == 1 {
+                0
+            } else {
+                Self::MAX_LEN
+            }
+        } else {
+            bisect_left(&self.inner, self.len(), 0, Self::MAX_LEN, cardinal)
+        }
     }
 }
 
@@ -380,8 +433,12 @@ impl<T> IntoIterator for List<T> {
     type IntoIter = IntoIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let next = self.inner.keys().next().copied();
-        let last = self.inner.keys().last().copied();
+        let next = if self.is_empty() { None } else { Some(0) };
+        let last = if self.len() == 1 {
+            Some(0)
+        } else {
+            Some(Self::MAX_LEN)
+        };
 
         IntoIter {
             inner: self.inner,
