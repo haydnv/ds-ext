@@ -1,166 +1,152 @@
-//! A linked list with cardinal indexing and O(log n) insert/remove anywhere in the [`List`].
+//! A linked list with cardinal indexing and O(log n) get/insert/remove anywhere in the [`List`].
 //!
 //! The API of [`List`] is designed to resemble [`std::collections::VecDeque`] but [`List`] does
 //! not use a `VecDeque`; instead each node in the list is assigned an ordinal value
-//! in the range `[0, usize::MAX)`, which is also stored in a
-//! [`HashMap`](`std::collections::HashMap`) of ordinal values to nodes.
+//! in the range `[0, usize::MAX)`, which is stored in a
+//! [`HashMap`](`std::collections::HashMap`) of ordinals to values.
 //!
-//! This design allows a cardinal index to be resolved to a node in O(log n) time.
+//! This design allows a cardinal index to be resolved to a value in O(log n) time.
 
-use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut, RangeBounds};
-use std::sync::Arc;
 
 struct Node<T> {
-    ordinal: usize,
-    next: Option<Arc<Value<T>>>,
-    prev: Option<Arc<Value<T>>>,
-}
-
-impl<T> Node<T> {
-    fn new(ordinal: usize) -> Self {
-        Self {
-            ordinal,
-            next: None,
-            prev: None,
-        }
-    }
-}
-
-struct Value<T> {
     value: T,
-    state: RefCell<Node<T>>,
-}
-
-impl<T> Value<T> {
-    fn new(ordinal: usize, value: T) -> Self {
-        Self {
-            value,
-            state: RefCell::new(Node::new(ordinal)),
-        }
-    }
-}
-
-/// A draining iterator over the elements of a [`List`]
-pub struct Drain<'a, T> {
-    #[allow(unused)]
-    list: &'a mut List<T>,
-    next: Option<Arc<Node<T>>>,
-    stop: Option<usize>,
-}
-
-impl<'a, T> Iterator for Drain<'a, T> {
-    type Item = &'a mut T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        todo!()
-    }
-}
-
-impl<'a, T> DoubleEndedIterator for Drain<'a, T> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        todo!()
-    }
+    prev: Option<usize>,
+    next: Option<usize>,
 }
 
 /// An iterator over the elements of a [`List`]
 pub struct IntoIter<T> {
-    next: Option<Arc<Node<T>>>,
+    inner: HashMap<usize, Node<T>>,
+    next: Option<usize>,
+    last: Option<usize>,
 }
 
 impl<T> Iterator for IntoIter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        let next = self.next?;
+        let node = self.inner.remove(&next).expect("next");
+
+        self.next = if self.last == Some(next) {
+            None
+        } else {
+            node.next
+        };
+
+        if self.next.is_none() {
+            self.last = None;
+        }
+
+        Some(node.value)
     }
 }
 
 impl<T> DoubleEndedIterator for IntoIter<T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        todo!()
+        let next = self.last?;
+        let node = self.inner.remove(&next).expect("next");
+
+        self.last = if self.next == Some(next) {
+            None
+        } else {
+            node.prev
+        };
+
+        if self.last.is_none() {
+            self.next = None;
+        }
+
+        Some(node.value)
     }
 }
 
 /// An iterator over the elements of a [`List`]
 pub struct Iter<'a, T> {
-    #[allow(unused)]
-    list: &'a List<T>,
-    next: Option<Arc<Node<T>>>,
-    stop: Option<usize>,
+    inner: &'a HashMap<usize, Node<T>>,
+    next: Option<&'a usize>,
+    stop: Option<&'a usize>,
 }
 
 impl<'a, T> Iterator for Iter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        let next = self.next?;
+        let node = self.inner.get(next).expect("next");
+
+        self.next = if self.stop == Some(next) {
+            None
+        } else {
+            node.next.as_ref()
+        };
+
+        if self.next.is_none() {
+            self.stop = None;
+        }
+
+        Some(&node.value)
     }
 }
 
 impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        todo!()
+        let next = self.stop?;
+        let node = self.inner.get(next).expect("next");
+
+        self.stop = if self.next == Some(next) {
+            None
+        } else {
+            node.prev.as_ref()
+        };
+
+        if self.stop.is_none() {
+            self.next = None;
+        }
+
+        Some(&node.value)
     }
 }
 
-/// An iterator over the elements of a [`List`]
-pub struct IterMut<'a, T> {
-    #[allow(unused)]
-    list: &'a mut List<T>,
-    next: Option<Arc<Node<T>>>,
-    stop: Option<usize>,
-}
-
-impl<'a, T> Iterator for IterMut<'a, T> {
-    type Item = &'a mut T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        todo!()
-    }
-}
-
-impl<'a, T> DoubleEndedIterator for IterMut<'a, T> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        todo!()
-    }
-}
-
-/// A linked list with cardinal indexing and O(log n) insert/remove by index anywhere in the list
+/// A linked list with cardinal indexing and O(log n) get/insert/remove by index
 pub struct List<T> {
-    head: Option<Arc<Node<T>>>,
-    tail: Option<Arc<Node<T>>>,
-    order: HashMap<usize, Arc<Node<T>>>,
+    inner: HashMap<usize, Node<T>>,
 }
 
 impl<T> List<T> {
     /// Create a new empty [`List`].
     pub fn new() -> Self {
         Self {
-            head: None,
-            tail: None,
-            order: HashMap::new(),
+            inner: HashMap::new(),
         }
     }
 
-    /// Create a new empty [`List`] with the given `capacity`.
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            head: None,
-            tail: None,
-            order: HashMap::with_capacity(capacity),
-        }
+    /// Borrow the last element in this [`List`], if any.
+    pub fn back(&self) -> Option<&T> {
+        self.inner.get(&usize::MAX).map(|node| &node.value)
+    }
+
+    /// Borrow the last element in this [`List`], if any.
+    pub fn back_mut(&mut self) -> Option<&mut T> {
+        self.inner.get_mut(&usize::MAX).map(|node| &mut node.value)
     }
 
     /// Remove all elements from this [`List`].
     pub fn clear(&mut self) {
-        todo!()
+        self.inner.clear()
     }
 
-    /// Remove and return all elements from thie [`List`].
-    pub fn drain(&mut self) -> Drain<T> {
-        todo!()
+    /// Borrow the first element in this [`List`], if any.
+    pub fn front(&self) -> Option<&T> {
+        self.inner.get(&0).map(|node| &node.value)
+    }
+
+    /// Borrow the last element in this [`List`], if any.
+    pub fn front_mut(&mut self) -> Option<&mut T> {
+        self.inner.get_mut(&0).map(|node| &mut node.value)
     }
 
     /// Borrow the element at the given `index`, if any.
@@ -173,38 +159,68 @@ impl<T> List<T> {
         todo!()
     }
 
+    fn insert_inner(&mut self, pos: (usize, usize, usize), value: T) {
+        let (prev, ordinal, next) = pos;
+
+        let node = Node {
+            value,
+            prev: Some(prev),
+            next: Some(next),
+        };
+
+        {
+            let prev = self.inner.get_mut(&prev).expect("prev");
+            prev.next = Some(ordinal);
+        }
+
+        {
+            let next = self.inner.get_mut(&next).expect("next");
+            next.prev = Some(ordinal);
+        }
+
+        assert!(self.inner.insert(ordinal, node).is_none());
+    }
+
     /// Insert a new `value` at the given `index`.
     pub fn insert(&mut self, index: usize, value: T) {
-        todo!()
+        match index {
+            0 => self.push_front(value),
+            i => match self.len().cmp(&i) {
+                Ordering::Less => panic!(
+                    "index {} is out of bounds for a list of length {}",
+                    i,
+                    self.len()
+                ),
+                Ordering::Equal => self.push_back(value),
+                Ordering::Greater => {
+                    let ordinal = bisect(&self.inner, self.len(), 0, usize::MAX, index);
+                    self.insert_inner(ordinal, value)
+                }
+            },
+        }
     }
 
     /// Iterate over all elements in this [`List`].
     pub fn iter(&self) -> Iter<T> {
-        todo!()
-    }
-
-    /// Iterate mutably over all elements in this [`List`].
-    pub fn iter_mut(&self) -> IterMut<T> {
-        todo!()
+        Iter {
+            inner: &self.inner,
+            next: self.inner.keys().next(),
+            stop: self.inner.keys().last(),
+        }
     }
 
     /// Return `true` if this [`List`] is empty.
     pub fn is_empty(&self) -> bool {
-        self.order.is_empty()
+        self.inner.is_empty()
     }
 
     /// Return the length of this [`List`].
     pub fn len(&self) -> usize {
-        self.order.len()
+        self.inner.len()
     }
 
     /// Iterate over the given `range` of elements in this [`List`].
-    pub fn range<R: RangeBounds<usize>>(&self, range: R) -> IntoIter<T> {
-        todo!()
-    }
-
-    /// Iterate mutably over the given `range` of elements in this [`List`].
-    pub fn range_mut<R: RangeBounds<usize>>(&self, range: R) -> IntoIter<T> {
+    pub fn range<R: RangeBounds<usize>>(&self, range: R) -> Iter<T> {
         todo!()
     }
 
@@ -214,12 +230,12 @@ impl<T> List<T> {
     }
 
     /// Remove and return the last value in this [`List`].
-    pub fn pop_back(&mut self, value: T) {
+    pub fn pop_back(&mut self) -> Option<T> {
         todo!()
     }
 
     /// Remove and return the first value in this [`List`].
-    pub fn pop_front(&mut self, value: T) {
+    pub fn pop_front(&mut self) -> Option<T> {
         todo!()
     }
 
@@ -230,16 +246,6 @@ impl<T> List<T> {
 
     /// Append the given `value` to the front of this [`List`].
     pub fn push_front(&mut self, value: T) {
-        todo!()
-    }
-
-    /// Split this list into two at the given index.
-    pub fn split_off(&mut self, at: usize) -> (Self, Self) {
-        todo!()
-    }
-
-    /// Drop all elements after the given index from this [`List`].
-    pub fn truncate(&mut self, at: usize) {
         todo!()
     }
 }
@@ -255,11 +261,7 @@ impl<T> Extend<T> for List<T> {
 impl<T> FromIterator<T> for List<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let source = iter.into_iter();
-        let mut list = match source.size_hint() {
-            (0, None) => List::new(),
-            (min, None) => List::with_capacity(min),
-            (_min, Some(max)) => List::with_capacity(max),
-        };
+        let mut list = List::new();
 
         for item in source {
             list.push_back(item);
@@ -288,7 +290,14 @@ impl<T> IntoIterator for List<T> {
     type IntoIter = IntoIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        todo!()
+        let next = self.inner.keys().next().copied();
+        let last = self.inner.keys().last().copied();
+
+        IntoIter {
+            inner: self.inner,
+            next,
+            last,
+        }
     }
 }
 
@@ -301,11 +310,64 @@ impl<'a, T> IntoIterator for &'a List<T> {
     }
 }
 
-impl<'a, T> IntoIterator for &'a mut List<T> {
-    type Item = &'a mut T;
-    type IntoIter = IterMut<'a, T>;
+// it's ok to inline these recursive functions, just like it's ok to unroll an infinite loop
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter_mut()
+/// determine a position such that there are `cardinal` number of elements to its left
+#[inline]
+fn bisect<T>(
+    nodes: &HashMap<usize, Node<T>>,
+    len: usize,
+    lo: usize,
+    hi: usize,
+    cardinal: usize,
+) -> (usize, usize, usize) {
+    let half = len >> 1;
+    match cardinal.cmp(&half) {
+        Ordering::Equal => partition(nodes, lo, hi),
+        Ordering::Less => {
+            let pivot = partition_inner(nodes, lo, hi);
+            bisect(nodes, half, lo, pivot, cardinal)
+        }
+        Ordering::Greater => {
+            let pivot = partition_inner(nodes, lo, hi);
+            bisect(nodes, half, hi, pivot, cardinal - half)
+        }
+    }
+}
+
+#[inline]
+fn partition<T>(nodes: &HashMap<usize, Node<T>>, lo: usize, hi: usize) -> (usize, usize, usize) {
+    let mid = (lo + hi) >> 1;
+
+    if let Some(node) = nodes.get(&mid) {
+        match (node.prev, node.next) {
+            (Some(_), Some(_)) => {
+                let lo = partition_inner(nodes, lo, mid);
+                let hi = partition_inner(nodes, mid, hi);
+                partition(nodes, lo, hi)
+            }
+            _ => unreachable!("inner node without two neighbors"),
+        }
+    } else {
+        (lo, mid, hi)
+    }
+}
+
+/// determine an ordinal to partition the given range such that half its elements lie on each side
+#[inline]
+fn partition_inner<T>(nodes: &HashMap<usize, Node<T>>, lo: usize, hi: usize) -> usize {
+    let mid = (lo + hi) >> 1;
+
+    if let Some(node) = nodes.get(&mid) {
+        match (node.prev, node.next) {
+            (Some(_), Some(_)) => {
+                let lo = partition_inner(nodes, lo, mid);
+                let hi = partition_inner(nodes, mid, hi);
+                partition_inner(nodes, lo, hi)
+            }
+            _ => unreachable!("inner node without two neighbors"),
+        }
+    } else {
+        mid
     }
 }
