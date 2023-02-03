@@ -569,7 +569,8 @@ impl<'a, T> IntoIterator for &'a List<T> {
 
 // it's ok to inline these recursive functions, just like it's ok to unroll an infinite loop
 
-/// determine an open position such that there are `cardinal` number of elements to its left
+/// find the open position in the given ordinal range
+/// such that there are `cardinal` number of elements to its left
 #[inline]
 fn bisect<T>(
     nodes: &HashMap<usize, Node<T>>,
@@ -589,17 +590,17 @@ fn bisect<T>(
     match cardinal.cmp(&half) {
         Ordering::Equal => partition(nodes, lo, hi),
         Ordering::Less => {
-            let pivot = partition_inner(nodes, lo, hi);
+            let pivot = median(nodes, lo, hi);
             bisect(nodes, half, lo, pivot, cardinal)
         }
         Ordering::Greater => {
-            let pivot = partition_inner(nodes, lo, hi);
+            let pivot = median(nodes, lo, hi);
             bisect(nodes, half, hi, pivot, cardinal - half)
         }
     }
 }
 
-/// determine the ordinal at index `cardinal`
+/// find the ordinal of index `cardinal` within the given ordinal range
 #[inline]
 fn bisect_left<T>(
     nodes: &HashMap<usize, Node<T>>,
@@ -617,28 +618,31 @@ fn bisect_left<T>(
 
     let half = len >> 1;
     match cardinal.cmp(&half) {
-        Ordering::Equal => partition(nodes, lo, hi).0,
+        Ordering::Equal => median(nodes, lo, hi),
         Ordering::Less => {
-            let pivot = partition_inner(nodes, lo, hi);
+            let pivot = median(nodes, lo, hi);
             bisect_left(nodes, half, lo, pivot, cardinal)
         }
         Ordering::Greater => {
-            let pivot = partition_inner(nodes, lo, hi);
+            let pivot = median(nodes, lo, hi);
             bisect_left(nodes, half, hi, pivot, cardinal - half)
         }
     }
 }
 
-/// find an unfilled position with half of the given range on each side
+/// find the unfilled position with half of the given ordinal range on each side
 #[inline]
 fn partition<T>(nodes: &HashMap<usize, Node<T>>, lo: usize, hi: usize) -> (usize, usize, usize) {
-    let mid = (lo + hi) >> 1;
+    debug_assert!(nodes.contains_key(&lo));
+    debug_assert!(nodes.contains_key(&hi));
+
+    let mid = lo + ((hi - lo) >> 1);
 
     if let Some(node) = nodes.get(&mid) {
         match (node.prev, node.next) {
             (Some(_), Some(_)) => {
-                let lo = partition_inner(nodes, lo, mid);
-                let hi = partition_inner(nodes, mid, hi);
+                let lo = median(nodes, lo, mid);
+                let hi = median(nodes, mid, hi);
                 partition(nodes, lo, hi)
             }
             _ => unreachable!("inner node without two neighbors"),
@@ -648,21 +652,24 @@ fn partition<T>(nodes: &HashMap<usize, Node<T>>, lo: usize, hi: usize) -> (usize
     }
 }
 
-/// determine an ordinal to partition the given range such that half its elements lie on each side
+/// find the filled ordinal at the median of the given ordinal range
 #[inline]
-fn partition_inner<T>(nodes: &HashMap<usize, Node<T>>, lo: usize, hi: usize) -> usize {
-    let mid = (lo + hi) >> 1;
+fn median<T>(nodes: &HashMap<usize, Node<T>>, lo: usize, hi: usize) -> usize {
+    debug_assert!(nodes.contains_key(&lo));
+    debug_assert!(nodes.contains_key(&hi));
+
+    let mid = lo + ((hi - lo) >> 1);
 
     if let Some(node) = nodes.get(&mid) {
         match (node.prev, node.next) {
             (Some(_), Some(_)) => {
-                let lo = partition_inner(nodes, lo, mid);
-                let hi = partition_inner(nodes, mid, hi);
-                partition_inner(nodes, lo, hi)
+                let lo = median(nodes, lo, mid);
+                let hi = median(nodes, mid, hi);
+                median(nodes, lo, hi)
             }
             _ => unreachable!("inner node without two neighbors"),
         }
     } else {
-        mid
+        lo
     }
 }
