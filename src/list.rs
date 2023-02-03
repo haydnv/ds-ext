@@ -386,7 +386,40 @@ impl<T> List<T> {
 
     /// Append the given `value` to the back of this [`List`].
     pub fn push_back(&mut self, value: T) {
-        todo!()
+        match self.len() {
+            0 => self.push_front(value),
+            1 => {
+                self.inner.get_mut(&0).expect("front").next = Some(Self::MAX_LEN);
+
+                let node = Node {
+                    value,
+                    prev: Some(0),
+                    next: None,
+                };
+
+                self.inner.insert(0, node);
+            }
+            _ => {
+                let mut node = self.inner.remove(&Self::MAX_LEN).expect("back");
+                let prev = node.prev.expect("prev");
+                let ordinal = prev + ((Self::MAX_LEN - prev) >> 1);
+
+                {
+                    let prev = self.inner.get_mut(&prev).expect("prev");
+                    prev.next = Some(ordinal);
+                }
+
+                self.inner.insert(ordinal, node);
+
+                let next = Node {
+                    value,
+                    prev: Some(ordinal),
+                    next: None,
+                };
+
+                self.inner.insert(Self::MAX_LEN, next);
+            }
+        }
     }
 
     /// Append the given `value` to the front of this [`List`].
