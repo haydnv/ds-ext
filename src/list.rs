@@ -400,7 +400,7 @@ impl<T> List<T> {
                 self.inner.insert(0, node);
             }
             _ => {
-                let mut node = self.inner.remove(&Self::MAX_LEN).expect("back");
+                let node = self.inner.remove(&Self::MAX_LEN).expect("back");
                 let prev = node.prev.expect("prev");
                 let ordinal = prev + ((Self::MAX_LEN - prev) >> 1);
 
@@ -424,7 +424,44 @@ impl<T> List<T> {
 
     /// Append the given `value` to the front of this [`List`].
     pub fn push_front(&mut self, value: T) {
-        todo!()
+        match self.len() {
+            0 => {
+                let node = Node {
+                    value,
+                    prev: None,
+                    next: None,
+                };
+
+                self.inner.insert(0, node);
+            }
+            1 => {
+                let mut back = self.inner.remove(&0).expect("back");
+                back.prev = Some(0);
+
+                let front = Node {
+                    value,
+                    prev: None,
+                    next: Some(Self::MAX_LEN),
+                };
+
+                self.inner.insert(0, front);
+                self.inner.insert(Self::MAX_LEN, back);
+            }
+            _ => {
+                let mut next = self.inner.remove(&0).expect("next");
+                let ordinal = next.next.expect("next") >> 1;
+                next.prev = Some(0);
+
+                let front = Node {
+                    value,
+                    prev: None,
+                    next: Some(ordinal),
+                };
+
+                self.inner.insert(0, front);
+                self.inner.insert(ordinal, next);
+            }
+        }
     }
 
     fn ordinal(&self, cardinal: usize) -> usize {
