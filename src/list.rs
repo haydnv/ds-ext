@@ -9,12 +9,37 @@
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::ops::{Index, IndexMut, RangeBounds};
+use std::ops::{Deref, DerefMut, Index, IndexMut, RangeBounds};
+
+macro_rules! assert_bounds {
+    ($i:expr, $len:expr) => {
+        assert!(
+            $i < $len,
+            "index {} is out of bounds for a list with length {}",
+            $i,
+            $len
+        )
+    };
+}
 
 struct Node<T> {
     value: T,
     prev: Option<usize>,
     next: Option<usize>,
+}
+
+impl<T> Deref for Node<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<T> DerefMut for Node<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
 }
 
 /// An iterator over the elements of a [`List`]
@@ -126,12 +151,12 @@ impl<T> List<T> {
 
     /// Borrow the last element in this [`List`], if any.
     pub fn back(&self) -> Option<&T> {
-        self.inner.get(&usize::MAX).map(|node| &node.value)
+        self.inner.get(&usize::MAX).map(Deref::deref)
     }
 
     /// Borrow the last element in this [`List`], if any.
     pub fn back_mut(&mut self) -> Option<&mut T> {
-        self.inner.get_mut(&usize::MAX).map(|node| &mut node.value)
+        self.inner.get_mut(&usize::MAX).map(DerefMut::deref_mut)
     }
 
     /// Remove all elements from this [`List`].
@@ -141,22 +166,40 @@ impl<T> List<T> {
 
     /// Borrow the first element in this [`List`], if any.
     pub fn front(&self) -> Option<&T> {
-        self.inner.get(&0).map(|node| &node.value)
+        self.inner.get(&0).map(Deref::deref)
     }
 
     /// Borrow the last element in this [`List`], if any.
     pub fn front_mut(&mut self) -> Option<&mut T> {
-        self.inner.get_mut(&0).map(|node| &mut node.value)
+        self.inner.get_mut(&0).map(DerefMut::deref_mut)
     }
 
     /// Borrow the element at the given `index`, if any.
     pub fn get(&self, index: usize) -> Option<&T> {
-        todo!()
+        if index == 0 {
+            self.front()
+        } else if index == (self.len() - 1) {
+            self.back()
+        } else if index < self.len() {
+            let ordinal = bisect_left(&self.inner, self.len(), 0, usize::MAX, index);
+            self.inner.get(&ordinal).map(Deref::deref)
+        } else {
+            None
+        }
     }
 
     /// Borrow the element at the given `index` mutably, if any.
     pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
-        todo!()
+        if index == 0 {
+            self.front_mut()
+        } else if index == (self.len() - 1) {
+            self.back_mut()
+        } else if index < self.len() {
+            let ordinal = bisect_left(&self.inner, self.len(), 0, usize::MAX, index);
+            self.inner.get_mut(&ordinal).map(DerefMut::deref_mut)
+        } else {
+            None
+        }
     }
 
     fn insert_inner(&mut self, pos: (usize, usize, usize), value: T) {
@@ -186,11 +229,7 @@ impl<T> List<T> {
         match index {
             0 => self.push_front(value),
             i => match self.len().cmp(&i) {
-                Ordering::Less => panic!(
-                    "index {} is out of bounds for a list of length {}",
-                    i,
-                    self.len()
-                ),
+                Ordering::Less => assert_bounds!(index, self.len()),
                 Ordering::Equal => self.push_back(value),
                 Ordering::Greater => {
                     let ordinal = bisect(&self.inner, self.len(), 0, usize::MAX, index);
@@ -275,13 +314,36 @@ impl<T> Index<usize> for List<T> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
-        todo!()
+        assert_bounds!(index, self.len());
+
+        if index == 0 {
+            self.front().expect("first element")
+        } else if index == self.len() - 1 {
+            self.back().expect("last element")
+        } else {
+            let ordinal = bisect_left(&self.inner, self.len(), 0, usize::MAX, index);
+
+            self.inner.get(&ordinal).map(Deref::deref).expect("element")
+        }
     }
 }
 
 impl<T> IndexMut<usize> for List<T> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        todo!()
+        assert_bounds!(index, self.len());
+
+        if index == 0 {
+            self.front_mut().expect("first element")
+        } else if index == self.len() - 1 {
+            self.back_mut().expect("last element")
+        } else {
+            let ordinal = bisect_left(&self.inner, self.len(), 0, usize::MAX, index);
+
+            self.inner
+                .get_mut(&ordinal)
+                .map(DerefMut::deref_mut)
+                .expect("element")
+        }
     }
 }
 
@@ -312,7 +374,7 @@ impl<'a, T> IntoIterator for &'a List<T> {
 
 // it's ok to inline these recursive functions, just like it's ok to unroll an infinite loop
 
-/// determine a position such that there are `cardinal` number of elements to its left
+/// determine an open position such that there are `cardinal` number of elements to its left
 #[inline]
 fn bisect<T>(
     nodes: &HashMap<usize, Node<T>>,
@@ -321,6 +383,13 @@ fn bisect<T>(
     hi: usize,
     cardinal: usize,
 ) -> (usize, usize, usize) {
+    debug_assert!(
+        cardinal < len,
+        "cardinal {} is out of bounds for length {}",
+        cardinal,
+        len
+    );
+
     let half = len >> 1;
     match cardinal.cmp(&half) {
         Ordering::Equal => partition(nodes, lo, hi),
@@ -335,6 +404,37 @@ fn bisect<T>(
     }
 }
 
+/// determine the ordinal at index `cardinal`
+#[inline]
+fn bisect_left<T>(
+    nodes: &HashMap<usize, Node<T>>,
+    len: usize,
+    lo: usize,
+    hi: usize,
+    cardinal: usize,
+) -> usize {
+    debug_assert!(
+        cardinal < len,
+        "cardinal {} is out of bounds for length {}",
+        cardinal,
+        len
+    );
+
+    let half = len >> 1;
+    match cardinal.cmp(&half) {
+        Ordering::Equal => partition(nodes, lo, hi).0,
+        Ordering::Less => {
+            let pivot = partition_inner(nodes, lo, hi);
+            bisect_left(nodes, half, lo, pivot, cardinal)
+        }
+        Ordering::Greater => {
+            let pivot = partition_inner(nodes, lo, hi);
+            bisect_left(nodes, half, hi, pivot, cardinal - half)
+        }
+    }
+}
+
+/// find an unfilled position with half of the given range on each side
 #[inline]
 fn partition<T>(nodes: &HashMap<usize, Node<T>>, lo: usize, hi: usize) -> (usize, usize, usize) {
     let mid = (lo + hi) >> 1;
