@@ -142,6 +142,8 @@ pub struct List<T> {
 }
 
 impl<T> List<T> {
+    const MAX_LEN: usize = usize::MAX;
+
     /// Create a new empty [`List`].
     pub fn new() -> Self {
         Self {
@@ -151,12 +153,12 @@ impl<T> List<T> {
 
     /// Borrow the last element in this [`List`], if any.
     pub fn back(&self) -> Option<&T> {
-        self.inner.get(&usize::MAX).map(Deref::deref)
+        self.inner.get(&Self::MAX_LEN).map(Deref::deref)
     }
 
     /// Borrow the last element in this [`List`], if any.
     pub fn back_mut(&mut self) -> Option<&mut T> {
-        self.inner.get_mut(&usize::MAX).map(DerefMut::deref_mut)
+        self.inner.get_mut(&Self::MAX_LEN).map(DerefMut::deref_mut)
     }
 
     /// Remove all elements from this [`List`].
@@ -181,7 +183,7 @@ impl<T> List<T> {
         } else if index == (self.len() - 1) {
             self.back()
         } else if index < self.len() {
-            let ordinal = bisect_left(&self.inner, self.len(), 0, usize::MAX, index);
+            let ordinal = self.ordinal(index);
             self.inner.get(&ordinal).map(Deref::deref)
         } else {
             None
@@ -195,7 +197,7 @@ impl<T> List<T> {
         } else if index == (self.len() - 1) {
             self.back_mut()
         } else if index < self.len() {
-            let ordinal = bisect_left(&self.inner, self.len(), 0, usize::MAX, index);
+            let ordinal = self.ordinal(index);
             self.inner.get_mut(&ordinal).map(DerefMut::deref_mut)
         } else {
             None
@@ -232,8 +234,8 @@ impl<T> List<T> {
                 Ordering::Less => assert_bounds!(index, self.len()),
                 Ordering::Equal => self.push_back(value),
                 Ordering::Greater => {
-                    let ordinal = bisect(&self.inner, self.len(), 0, usize::MAX, index);
-                    self.insert_inner(ordinal, value)
+                    let pos = bisect(&self.inner, self.len(), 0, Self::MAX_LEN, index);
+                    self.insert_inner(pos, value)
                 }
             },
         }
@@ -265,7 +267,30 @@ impl<T> List<T> {
 
     /// Remove and return the value at the given `index`, if any.
     pub fn remove(&mut self, index: usize) -> Option<T> {
-        todo!()
+        if index == 0 {
+            return self.pop_front();
+        } else if index == self.len() - 1 {
+            return self.pop_back();
+        } else if index >= self.len() {
+            return None;
+        }
+
+        let ordinal = self.ordinal(index);
+        let node = self.inner.remove(&ordinal).expect("node");
+        let prev = node.prev.expect("prev");
+        let next = node.next.expect("next");
+
+        {
+            let prev = self.inner.get_mut(&prev).expect("prev");
+            prev.next = Some(next);
+        }
+
+        {
+            let next = self.inner.get_mut(&next).expect("next");
+            next.prev = Some(prev);
+        }
+
+        Some(node.value)
     }
 
     /// Remove and return the last value in this [`List`].
@@ -286,6 +311,10 @@ impl<T> List<T> {
     /// Append the given `value` to the front of this [`List`].
     pub fn push_front(&mut self, value: T) {
         todo!()
+    }
+
+    fn ordinal(&self, cardinal: usize) -> usize {
+        bisect_left(&self.inner, self.len(), 0, Self::MAX_LEN, cardinal)
     }
 }
 
@@ -321,8 +350,7 @@ impl<T> Index<usize> for List<T> {
         } else if index == self.len() - 1 {
             self.back().expect("last element")
         } else {
-            let ordinal = bisect_left(&self.inner, self.len(), 0, usize::MAX, index);
-
+            let ordinal = self.ordinal(index);
             self.inner.get(&ordinal).map(Deref::deref).expect("element")
         }
     }
@@ -337,7 +365,7 @@ impl<T> IndexMut<usize> for List<T> {
         } else if index == self.len() - 1 {
             self.back_mut().expect("last element")
         } else {
-            let ordinal = bisect_left(&self.inner, self.len(), 0, usize::MAX, index);
+            let ordinal = self.ordinal(index);
 
             self.inner
                 .get_mut(&ordinal)
