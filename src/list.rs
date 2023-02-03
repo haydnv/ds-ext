@@ -336,7 +336,32 @@ impl<T> List<T> {
 
     /// Remove and return the last value in this [`List`].
     pub fn pop_back(&mut self) -> Option<T> {
-        todo!()
+        if self.is_empty() {
+            return None;
+        } else if self.len() == 1 {
+            return self.inner.remove(&0).map(|node| node.value);
+        }
+
+        let next = self.inner.remove(&Self::MAX_LEN)?;
+
+        match next.prev.as_ref().expect("node") {
+            0 => {}
+            ordinal => {
+                let mut node = self.inner.remove(ordinal).expect("node");
+                debug_assert_eq!(node.next, Some(Self::MAX_LEN));
+                node.next = None;
+
+                {
+                    let prev = node.prev.as_ref().expect("prev");
+                    let prev = self.inner.get_mut(prev).expect("prev");
+                    prev.next = Some(Self::MAX_LEN);
+                }
+
+                self.inner.insert(Self::MAX_LEN, node);
+            }
+        }
+
+        Some(next.value)
     }
 
     /// Remove and return the first value in this [`List`].
