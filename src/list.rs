@@ -366,7 +366,22 @@ impl<T> List<T> {
 
     /// Remove and return the first value in this [`List`].
     pub fn pop_front(&mut self) -> Option<T> {
-        todo!()
+        if self.is_empty() {
+            return None;
+        }
+
+        let prev = self.inner.remove(&0)?;
+        let mut node = self
+            .inner
+            .remove(prev.next.as_ref().expect("node"))
+            .expect("node");
+
+        debug_assert_eq!(node.prev, Some(0));
+        node.prev = None;
+
+        self.inner.insert(0, node);
+
+        Some(prev.value)
     }
 
     /// Append the given `value` to the back of this [`List`].
