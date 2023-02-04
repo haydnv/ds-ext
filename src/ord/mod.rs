@@ -4,3 +4,4 @@ pub mod list;
 mod tree;
 
 pub use list::List;
+pub use tree::Tree;

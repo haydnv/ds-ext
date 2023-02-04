@@ -440,8 +440,6 @@ impl<T> List<T> {
                 self.list.insert(0, node);
             }
             1 => {
-                let median = Self::MAX_LEN >> 1;
-
                 let mut back = self.list.remove(&0).expect("back");
                 back.prev = Some(0);
 
@@ -593,7 +591,7 @@ fn bisect<T>(list: &List<T>, len: usize, lo: usize, hi: usize, cardinal: usize) 
             match cardinal.cmp(&half) {
                 Ordering::Less => bisect(list, half, lo, pivot, cardinal),
                 Ordering::Equal | Ordering::Greater => {
-                    bisect(list, half, hi, pivot, cardinal - half)
+                    bisect(list, half, pivot, hi, cardinal - half)
                 }
             }
         }

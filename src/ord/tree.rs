@@ -1,7 +1,17 @@
 //! A binary search tree of ordinal values
+//!
+//! Example usage:
+//! ```
+//! use ds_ext::ord::Tree;
+//!
+//! let mut tree = Tree::new(32);
+//! tree.insert(1);
+//! assert_eq!(tree.size(), 1);
+//! 
+//! ```
 
-use std::collections::HashSet;
-use std::hash::{Hash, Hasher};
+use std::cmp::Ordering;
+use std::collections::HashMap;
 
 macro_rules! assert_bounds {
     ($i:expr, $max:expr) => {
@@ -14,28 +24,14 @@ macro_rules! assert_bounds {
     };
 }
 
-#[derive(Eq)]
 struct Node {
-    value: usize,
     left: Option<usize>,
     right: Option<usize>,
 }
 
-impl PartialEq for Node {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
-    }
-}
-
-impl Hash for Node {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.value.hash(state)
-    }
-}
-
 /// A binary tree of ordinal values
 pub struct Tree {
-    nodes: HashSet<Node>,
+    nodes: HashMap<usize, Node>,
     root: Option<usize>,
     max_size: usize,
 }
@@ -44,7 +40,7 @@ impl Tree {
     /// Construct a new [`Tree`].
     pub fn new(max_size: usize) -> Self {
         Self {
-            nodes: HashSet::new(),
+            nodes: HashMap::new(),
             root: None,
             max_size,
         }
@@ -53,6 +49,11 @@ impl Tree {
     /// Check the maximum allowed size of this [`Tree`].
     pub fn max_size(&self) -> usize {
         self.max_size
+    }
+
+    /// Check the size of this [`Tree`].
+    pub fn size(&self) -> usize {
+        self.nodes.len()
     }
 
     /// Insert a new `ordinal` into this [`Tree`].
@@ -66,12 +67,11 @@ impl Tree {
             insert(&mut self.nodes, root, ordinal);
         } else {
             let root = Node {
-                value: ordinal,
                 left: None,
                 right: None,
             };
 
-            self.nodes.insert(root);
+            self.nodes.insert(ordinal, root);
             self.root = Some(ordinal);
         }
     }
@@ -108,16 +108,34 @@ impl Tree {
 }
 
 #[inline]
-fn insert(nodes: &mut HashSet<Node>, node: usize, ordinal: usize) {
+fn insert(nodes: &mut HashMap<usize, Node>, node: usize, ordinal: usize) {
+    let children = nodes.get_mut(&node).expect("node");
+
+    match node.cmp(&ordinal) {
+        Ordering::Greater => {
+            if let Some(left) = children.left {
+                insert(nodes, left, ordinal)
+            } else {
+                children.left = Some(ordinal)
+            }
+        }
+        Ordering::Equal => {}
+        Ordering::Less => {
+            if let Some(right) = children.right {
+                insert(nodes, right, ordinal)
+            } else {
+                children.right = Some(ordinal)
+            }
+        }
+    }
+}
+
+#[inline]
+fn median(nodes: &HashMap<usize, Node>, node: usize) -> usize {
     todo!()
 }
 
 #[inline]
-fn median(nodes: &HashSet<Node>, node: usize) -> usize {
-    todo!()
-}
-
-#[inline]
-fn remove(nodes: &mut HashSet<Node>, node: usize, ordinal: usize) {
+fn remove(nodes: &mut HashMap<usize, Node>, node: usize, ordinal: usize) {
     todo!()
 }
