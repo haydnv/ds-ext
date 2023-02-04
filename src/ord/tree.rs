@@ -7,7 +7,29 @@
 //! let mut tree = Tree::new(32);
 //! tree.insert(1);
 //! assert_eq!(tree.size(), 1);
-//! 
+//!
+//! tree.insert(2);
+//! assert_eq!(tree.size(), 2);
+//!
+//! tree.insert(2);
+//! assert_eq!(tree.size(), 2);
+//!
+//! tree.insert(3);
+//! tree.remove(3);
+//! assert_eq!(tree.size(), 2);
+//!
+//! tree.insert(3);
+//! tree.remove(2);
+//! assert_eq!(tree.size(), 2);
+//!
+//! tree.insert(16);
+//! tree.insert(8);
+//! tree.insert(24);
+//! tree.remove(16);
+//! assert_eq!(tree.size(), 4);
+//!
+//! tree.remove(1);
+//! assert_eq!(tree.size(), 3);
 //! ```
 
 use std::cmp::Ordering;
@@ -24,9 +46,19 @@ macro_rules! assert_bounds {
     };
 }
 
+#[derive(Copy, Clone)]
 struct Node {
     left: Option<usize>,
     right: Option<usize>,
+}
+
+impl Node {
+    fn new() -> Self {
+        Self {
+            left: None,
+            right: None,
+        }
+    }
 }
 
 /// A binary tree of ordinal values
@@ -66,12 +98,7 @@ impl Tree {
         if let Some(root) = self.root {
             insert(&mut self.nodes, root, ordinal);
         } else {
-            let root = Node {
-                left: None,
-                right: None,
-            };
-
-            self.nodes.insert(ordinal, root);
+            self.nodes.insert(ordinal, Node::new());
             self.root = Some(ordinal);
         }
     }
@@ -102,7 +129,11 @@ impl Tree {
         assert_bounds!(ordinal, self.max_size);
 
         if let Some(root) = self.root {
-            remove(&mut self.nodes, root, ordinal)
+            if root == ordinal {
+                self.root = remove_inner(&mut self.nodes, root);
+            } else {
+                remove(&mut self.nodes, root, ordinal)
+            }
         }
     }
 }
@@ -116,7 +147,8 @@ fn insert(nodes: &mut HashMap<usize, Node>, node: usize, ordinal: usize) {
             if let Some(left) = children.left {
                 insert(nodes, left, ordinal)
             } else {
-                children.left = Some(ordinal)
+                children.left = Some(ordinal);
+                nodes.insert(ordinal, Node::new());
             }
         }
         Ordering::Equal => {}
@@ -124,7 +156,8 @@ fn insert(nodes: &mut HashMap<usize, Node>, node: usize, ordinal: usize) {
             if let Some(right) = children.right {
                 insert(nodes, right, ordinal)
             } else {
-                children.right = Some(ordinal)
+                children.right = Some(ordinal);
+                nodes.insert(ordinal, Node::new());
             }
         }
     }
@@ -137,5 +170,68 @@ fn median(nodes: &HashMap<usize, Node>, node: usize) -> usize {
 
 #[inline]
 fn remove(nodes: &mut HashMap<usize, Node>, node: usize, ordinal: usize) {
-    todo!()
+    let mut children = *nodes.get(&node).expect("node");
+
+    match node.cmp(&ordinal) {
+        Ordering::Greater => {
+            if let Some(left) = children.left {
+                if left == ordinal {
+                    children.left = remove_inner(nodes, left);
+                    nodes.insert(node, children);
+                } else {
+                    remove(nodes, left, ordinal)
+                }
+            } else {
+                // nothing to remove
+            }
+        }
+        Ordering::Less => {
+            if let Some(right) = children.right {
+                if right == ordinal {
+                    children.right = remove_inner(nodes, right);
+                    nodes.insert(node, children);
+                } else {
+                    remove(nodes, right, ordinal)
+                }
+            } else {
+                // nothing to remove
+            }
+        }
+        Ordering::Equal => unreachable!("a tree node cannot delete itself"),
+    }
+}
+
+#[inline]
+fn remove_inner(nodes: &mut HashMap<usize, Node>, node: usize) -> Option<usize> {
+    let deleted = nodes.remove(&node).expect("node");
+
+    let new_node = match (deleted.left, deleted.right) {
+        (None, None) => None,
+        (Some(left), None) => {
+            // move the left child up
+            Some(left)
+        }
+        (None, Some(right)) => {
+            // move the right child up
+            Some(right)
+        }
+        (Some(_left), Some(right)) => {
+            let inorder_successor = remove_min(nodes, right);
+            nodes.insert(inorder_successor, deleted);
+            Some(inorder_successor)
+        }
+    };
+
+    new_node
+}
+
+#[inline]
+fn remove_min(nodes: &mut HashMap<usize, Node>, node: usize) -> usize {
+    let mut children = nodes.get_mut(&node).expect("node");
+    if let Some(left) = children.left {
+        remove_min(nodes, left)
+    } else {
+        children.left = None;
+        node
+    }
 }
