@@ -206,38 +206,39 @@ impl<T> List<T> {
         }
     }
 
-    fn insert_inner(&mut self, pos: (usize, usize, usize), value: T) {
-        let (prev, ordinal, next) = pos;
-
-        let node = Node {
-            value,
-            prev: Some(prev),
-            next: Some(next),
-        };
-
-        {
-            let prev = self.inner.get_mut(&prev).expect("prev");
-            prev.next = Some(ordinal);
-        }
-
-        {
-            let next = self.inner.get_mut(&next).expect("next");
-            next.prev = Some(ordinal);
-        }
-
-        assert!(self.inner.insert(ordinal, node).is_none());
-    }
-
     /// Insert a new `value` at the given `index`.
     pub fn insert(&mut self, index: usize, value: T) {
         match index {
             0 => self.push_front(value),
             i => match self.len().cmp(&i) {
-                Ordering::Less => assert_bounds!(index, self.len()),
+                Ordering::Less => assert_bounds!(i, self.len()),
                 Ordering::Equal => self.push_back(value),
                 Ordering::Greater => {
-                    let pos = bisect(&self.inner, self.len(), 0, Self::MAX_LEN, index);
-                    self.insert_inner(pos, value)
+                    let prev = bisect(&self.inner, self.len(), 0, Self::MAX_LEN, i);
+
+                    let (ordinal, next) = {
+                        let node = self.inner.get_mut(&prev).expect("prev");
+                        let next = node.next.expect("next");
+                        let ordinal = prev + ((next - prev) >> 1);
+
+                        node.next = Some(ordinal);
+
+                        (ordinal, next)
+                    };
+
+                    {
+                        let node = self.inner.get_mut(&next).expect("next");
+                        debug_assert_eq!(node.prev, Some(prev));
+                        node.prev = Some(ordinal);
+                    }
+
+                    let node = Node {
+                        value,
+                        prev: Some(prev),
+                        next: Some(next),
+                    };
+
+                    self.inner.insert(ordinal, node);
                 }
             },
         }
@@ -476,7 +477,7 @@ impl<T> List<T> {
                 Self::MAX_LEN
             }
         } else {
-            bisect_left(&self.inner, self.len(), 0, Self::MAX_LEN, cardinal)
+            bisect(&self.inner, self.len(), 0, Self::MAX_LEN, cardinal)
         }
     }
 }
@@ -569,40 +570,9 @@ impl<'a, T> IntoIterator for &'a List<T> {
 
 // it's ok to inline these recursive functions, just like it's ok to unroll an infinite loop
 
-/// find the open position in the given ordinal range
-/// such that there are `cardinal` number of elements to its left
-#[inline]
-fn bisect<T>(
-    nodes: &HashMap<usize, Node<T>>,
-    len: usize,
-    lo: usize,
-    hi: usize,
-    cardinal: usize,
-) -> (usize, usize, usize) {
-    debug_assert!(
-        cardinal < len,
-        "cardinal {} is out of bounds for length {}",
-        cardinal,
-        len
-    );
-
-    let half = len >> 1;
-    match cardinal.cmp(&half) {
-        Ordering::Equal => partition(nodes, lo, hi),
-        Ordering::Less => {
-            let pivot = median(nodes, lo, hi);
-            bisect(nodes, half, lo, pivot, cardinal)
-        }
-        Ordering::Greater => {
-            let pivot = median(nodes, lo, hi);
-            bisect(nodes, half, hi, pivot, cardinal - half)
-        }
-    }
-}
-
 /// find the ordinal of index `cardinal` within the given ordinal range
 #[inline]
-fn bisect_left<T>(
+fn bisect<T>(
     nodes: &HashMap<usize, Node<T>>,
     len: usize,
     lo: usize,
@@ -621,55 +591,17 @@ fn bisect_left<T>(
         Ordering::Equal => median(nodes, lo, hi),
         Ordering::Less => {
             let pivot = median(nodes, lo, hi);
-            bisect_left(nodes, half, lo, pivot, cardinal)
+            bisect(nodes, half, lo, pivot, cardinal)
         }
         Ordering::Greater => {
             let pivot = median(nodes, lo, hi);
-            bisect_left(nodes, half, hi, pivot, cardinal - half)
+            bisect(nodes, half, hi, pivot, cardinal - half)
         }
-    }
-}
-
-/// find the unfilled position with half of the given ordinal range on each side
-#[inline]
-fn partition<T>(nodes: &HashMap<usize, Node<T>>, lo: usize, hi: usize) -> (usize, usize, usize) {
-    debug_assert!(nodes.contains_key(&lo));
-    debug_assert!(nodes.contains_key(&hi));
-
-    let mid = lo + ((hi - lo) >> 1);
-
-    if let Some(node) = nodes.get(&mid) {
-        match (node.prev, node.next) {
-            (Some(_), Some(_)) => {
-                let lo = median(nodes, lo, mid);
-                let hi = median(nodes, mid, hi);
-                partition(nodes, lo, hi)
-            }
-            _ => unreachable!("inner node without two neighbors"),
-        }
-    } else {
-        (lo, mid, hi)
     }
 }
 
 /// find the filled ordinal at the median of the given ordinal range
 #[inline]
 fn median<T>(nodes: &HashMap<usize, Node<T>>, lo: usize, hi: usize) -> usize {
-    debug_assert!(nodes.contains_key(&lo));
-    debug_assert!(nodes.contains_key(&hi));
-
-    let mid = lo + ((hi - lo) >> 1);
-
-    if let Some(node) = nodes.get(&mid) {
-        match (node.prev, node.next) {
-            (Some(_), Some(_)) => {
-                let lo = median(nodes, lo, mid);
-                let hi = median(nodes, mid, hi);
-                median(nodes, lo, hi)
-            }
-            _ => unreachable!("inner node without two neighbors"),
-        }
-    } else {
-        lo
-    }
+    todo!()
 }
