@@ -11,7 +11,7 @@
 use std::collections::hash_map::HashMap as Inner;
 use std::sync::Arc;
 
-use crate::list::List;
+use crate::ord::List;
 
 /// An ordered map which supports indexing by cardinality
 pub struct HashMap<K, V> {

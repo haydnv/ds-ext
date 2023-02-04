@@ -1,7 +1,7 @@
-//! A linked list with cardinal indexing and O(log n) get/insert/remove anywhere in the [`List`].
+//! A linked ord with cardinal indexing and O(log n) get/insert/remove anywhere in the [`List`].
 //!
 //! The API of [`List`] is designed to resemble [`std::collections::VecDeque`] but [`List`] does
-//! not use a `VecDeque`; instead each node in the list is assigned an ordinal value
+//! not use a `VecDeque`; instead each node in the ord is assigned an ordinal value
 //! in the range `[0, usize::MAX)`, which is stored in a
 //! [`HashMap`](`std::collections::HashMap`) of ordinals to values.
 //!
@@ -11,11 +11,13 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::{Bound, Deref, DerefMut, Index, IndexMut, RangeBounds};
 
+use super::tree::Tree;
+
 macro_rules! assert_bounds {
     ($i:expr, $len:expr) => {
         assert!(
             $i < $len,
-            "index {} is out of bounds for a list with length {}",
+            "index {} is out of bounds for a ord with length {}",
             $i,
             $len
         )
@@ -136,9 +138,10 @@ impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
     }
 }
 
-/// A linked list with cardinal indexing and O(log n) get/insert/remove by index
+/// A linked ord with cardinal indexing and O(log n) get/insert/remove by index
 pub struct List<T> {
-    inner: HashMap<usize, Node<T>>,
+    list: HashMap<usize, Node<T>>,
+    tree: Tree,
 }
 
 impl<T> List<T> {
@@ -147,35 +150,36 @@ impl<T> List<T> {
     /// Create a new empty [`List`].
     pub fn new() -> Self {
         Self {
-            inner: HashMap::new(),
+            list: HashMap::new(),
+            tree: Tree::new(Self::MAX_LEN),
         }
     }
 
     /// Borrow the last element in this [`List`], if any.
     pub fn back(&self) -> Option<&T> {
         let ordinal = if self.len() == 1 { 0 } else { Self::MAX_LEN };
-        self.inner.get(&ordinal).map(Deref::deref)
+        self.list.get(&ordinal).map(Deref::deref)
     }
 
     /// Borrow the last element in this [`List`], if any.
     pub fn back_mut(&mut self) -> Option<&mut T> {
         let ordinal = if self.len() == 1 { 0 } else { Self::MAX_LEN };
-        self.inner.get_mut(&ordinal).map(DerefMut::deref_mut)
+        self.list.get_mut(&ordinal).map(DerefMut::deref_mut)
     }
 
     /// Remove all elements from this [`List`].
     pub fn clear(&mut self) {
-        self.inner.clear()
+        self.list.clear();
     }
 
     /// Borrow the first element in this [`List`], if any.
     pub fn front(&self) -> Option<&T> {
-        self.inner.get(&0).map(Deref::deref)
+        self.list.get(&0).map(Deref::deref)
     }
 
     /// Borrow the last element in this [`List`], if any.
     pub fn front_mut(&mut self) -> Option<&mut T> {
-        self.inner.get_mut(&0).map(DerefMut::deref_mut)
+        self.list.get_mut(&0).map(DerefMut::deref_mut)
     }
 
     /// Borrow the element at the given `index`, if any.
@@ -186,7 +190,7 @@ impl<T> List<T> {
             self.back()
         } else if index < self.len() {
             let ordinal = self.ordinal(index);
-            self.inner.get(&ordinal).map(Deref::deref)
+            self.list.get(&ordinal).map(Deref::deref)
         } else {
             None
         }
@@ -200,7 +204,7 @@ impl<T> List<T> {
             self.back_mut()
         } else if index < self.len() {
             let ordinal = self.ordinal(index);
-            self.inner.get_mut(&ordinal).map(DerefMut::deref_mut)
+            self.list.get_mut(&ordinal).map(DerefMut::deref_mut)
         } else {
             None
         }
@@ -214,10 +218,10 @@ impl<T> List<T> {
                 Ordering::Less => assert_bounds!(i, self.len()),
                 Ordering::Equal => self.push_back(value),
                 Ordering::Greater => {
-                    let prev = bisect(&self.inner, self.len(), 0, Self::MAX_LEN, i);
+                    let prev = self.ordinal(i);
 
                     let (ordinal, next) = {
-                        let node = self.inner.get_mut(&prev).expect("prev");
+                        let node = self.list.get_mut(&prev).expect("prev");
                         let next = node.next.expect("next");
                         let ordinal = prev + ((next - prev) >> 1);
 
@@ -227,7 +231,7 @@ impl<T> List<T> {
                     };
 
                     {
-                        let node = self.inner.get_mut(&next).expect("next");
+                        let node = self.list.get_mut(&next).expect("next");
                         debug_assert_eq!(node.prev, Some(prev));
                         node.prev = Some(ordinal);
                     }
@@ -238,7 +242,7 @@ impl<T> List<T> {
                         next: Some(next),
                     };
 
-                    self.inner.insert(ordinal, node);
+                    self.list.insert(ordinal, node);
                 }
             },
         }
@@ -254,7 +258,7 @@ impl<T> List<T> {
         };
 
         Iter {
-            inner: &self.inner,
+            inner: &self.list,
             next,
             stop,
         }
@@ -262,19 +266,19 @@ impl<T> List<T> {
 
     /// Return `true` if this [`List`] is empty.
     pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
+        self.list.is_empty()
     }
 
     /// Return the length of this [`List`].
     pub fn len(&self) -> usize {
-        self.inner.len()
+        self.list.len()
     }
 
     /// Iterate over the given `range` of elements in this [`List`].
     pub fn range<R: RangeBounds<usize>>(&self, range: R) -> Iter<T> {
         if self.is_empty() {
             return Iter {
-                inner: &self.inner,
+                inner: &self.list,
                 next: None,
                 stop: None,
             };
@@ -285,7 +289,7 @@ impl<T> List<T> {
             Bound::Included(start) => Some(self.ordinal(*start)),
             Bound::Excluded(start) => {
                 let ordinal = self.ordinal(*start);
-                self.inner.get(&ordinal).expect("node").next
+                self.list.get(&ordinal).expect("node").next
             }
         };
 
@@ -296,12 +300,12 @@ impl<T> List<T> {
             Bound::Included(end) => Some(self.ordinal(*end)),
             Bound::Excluded(end) => {
                 let ordinal = self.ordinal(*end);
-                self.inner.get(&ordinal).expect("node").prev
+                self.list.get(&ordinal).expect("node").prev
             }
         };
 
         Iter {
-            inner: &self.inner,
+            inner: &self.list,
             next,
             stop,
         }
@@ -318,17 +322,17 @@ impl<T> List<T> {
         }
 
         let ordinal = self.ordinal(index);
-        let node = self.inner.remove(&ordinal).expect("node");
+        let node = self.list.remove(&ordinal).expect("node");
         let prev = node.prev.expect("prev");
         let next = node.next.expect("next");
 
         {
-            let prev = self.inner.get_mut(&prev).expect("prev");
+            let prev = self.list.get_mut(&prev).expect("prev");
             prev.next = Some(next);
         }
 
         {
-            let next = self.inner.get_mut(&next).expect("next");
+            let next = self.list.get_mut(&next).expect("next");
             next.prev = Some(prev);
         }
 
@@ -340,25 +344,25 @@ impl<T> List<T> {
         if self.is_empty() {
             return None;
         } else if self.len() == 1 {
-            return self.inner.remove(&0).map(|node| node.value);
+            return self.list.remove(&0).map(|node| node.value);
         }
 
-        let next = self.inner.remove(&Self::MAX_LEN)?;
+        let next = self.list.remove(&Self::MAX_LEN)?;
 
         match next.prev.as_ref().expect("node") {
             0 => {}
             ordinal => {
-                let mut node = self.inner.remove(ordinal).expect("node");
+                let mut node = self.list.remove(ordinal).expect("node");
                 debug_assert_eq!(node.next, Some(Self::MAX_LEN));
                 node.next = None;
 
                 {
                     let prev = node.prev.as_ref().expect("prev");
-                    let prev = self.inner.get_mut(prev).expect("prev");
+                    let prev = self.list.get_mut(prev).expect("prev");
                     prev.next = Some(Self::MAX_LEN);
                 }
 
-                self.inner.insert(Self::MAX_LEN, node);
+                self.list.insert(Self::MAX_LEN, node);
             }
         }
 
@@ -371,16 +375,16 @@ impl<T> List<T> {
             return None;
         }
 
-        let prev = self.inner.remove(&0)?;
+        let prev = self.list.remove(&0)?;
         let mut node = self
-            .inner
+            .list
             .remove(prev.next.as_ref().expect("node"))
             .expect("node");
 
         debug_assert_eq!(node.prev, Some(0));
         node.prev = None;
 
-        self.inner.insert(0, node);
+        self.list.insert(0, node);
 
         Some(prev.value)
     }
@@ -390,7 +394,7 @@ impl<T> List<T> {
         match self.len() {
             0 => self.push_front(value),
             1 => {
-                self.inner.get_mut(&0).expect("front").next = Some(Self::MAX_LEN);
+                self.list.get_mut(&0).expect("front").next = Some(Self::MAX_LEN);
 
                 let node = Node {
                     value,
@@ -398,19 +402,19 @@ impl<T> List<T> {
                     next: None,
                 };
 
-                self.inner.insert(0, node);
+                self.list.insert(0, node);
             }
             _ => {
-                let node = self.inner.remove(&Self::MAX_LEN).expect("back");
+                let node = self.list.remove(&Self::MAX_LEN).expect("back");
                 let prev = node.prev.expect("prev");
                 let ordinal = prev + ((Self::MAX_LEN - prev) >> 1);
 
                 {
-                    let prev = self.inner.get_mut(&prev).expect("prev");
+                    let prev = self.list.get_mut(&prev).expect("prev");
                     prev.next = Some(ordinal);
                 }
 
-                self.inner.insert(ordinal, node);
+                self.list.insert(ordinal, node);
 
                 let next = Node {
                     value,
@@ -418,7 +422,7 @@ impl<T> List<T> {
                     next: None,
                 };
 
-                self.inner.insert(Self::MAX_LEN, next);
+                self.list.insert(Self::MAX_LEN, next);
             }
         }
     }
@@ -433,10 +437,12 @@ impl<T> List<T> {
                     next: None,
                 };
 
-                self.inner.insert(0, node);
+                self.list.insert(0, node);
             }
             1 => {
-                let mut back = self.inner.remove(&0).expect("back");
+                let median = Self::MAX_LEN >> 1;
+
+                let mut back = self.list.remove(&0).expect("back");
                 back.prev = Some(0);
 
                 let front = Node {
@@ -445,11 +451,12 @@ impl<T> List<T> {
                     next: Some(Self::MAX_LEN),
                 };
 
-                self.inner.insert(0, front);
-                self.inner.insert(Self::MAX_LEN, back);
+                self.list.insert(0, front);
+                self.list.insert(Self::MAX_LEN, back);
             }
             _ => {
-                let mut next = self.inner.remove(&0).expect("next");
+                let mut next = self.list.remove(&0).expect("next");
+
                 let ordinal = next.next.expect("next") >> 1;
                 next.prev = Some(0);
 
@@ -459,8 +466,8 @@ impl<T> List<T> {
                     next: Some(ordinal),
                 };
 
-                self.inner.insert(0, front);
-                self.inner.insert(ordinal, next);
+                self.list.insert(0, front);
+                self.list.insert(ordinal, next);
             }
         }
     }
@@ -477,7 +484,7 @@ impl<T> List<T> {
                 Self::MAX_LEN
             }
         } else {
-            bisect(&self.inner, self.len(), 0, Self::MAX_LEN, cardinal)
+            bisect(&self, self.len(), 0, Self::MAX_LEN, cardinal)
         }
     }
 }
@@ -515,7 +522,7 @@ impl<T> Index<usize> for List<T> {
             self.back().expect("last element")
         } else {
             let ordinal = self.ordinal(index);
-            self.inner.get(&ordinal).map(Deref::deref).expect("element")
+            self.list.get(&ordinal).map(Deref::deref).expect("element")
         }
     }
 }
@@ -531,7 +538,7 @@ impl<T> IndexMut<usize> for List<T> {
         } else {
             let ordinal = self.ordinal(index);
 
-            self.inner
+            self.list
                 .get_mut(&ordinal)
                 .map(DerefMut::deref_mut)
                 .expect("element")
@@ -552,7 +559,7 @@ impl<T> IntoIterator for List<T> {
         };
 
         IntoIter {
-            inner: self.inner,
+            inner: self.list,
             next,
             last,
         }
@@ -568,17 +575,9 @@ impl<'a, T> IntoIterator for &'a List<T> {
     }
 }
 
-// it's ok to inline these recursive functions, just like it's ok to unroll an infinite loop
-
 /// find the ordinal of index `cardinal` within the given ordinal range
 #[inline]
-fn bisect<T>(
-    nodes: &HashMap<usize, Node<T>>,
-    len: usize,
-    lo: usize,
-    hi: usize,
-    cardinal: usize,
-) -> usize {
+fn bisect<T>(list: &List<T>, len: usize, lo: usize, hi: usize, cardinal: usize) -> usize {
     debug_assert!(
         cardinal < len,
         "cardinal {} is out of bounds for length {}",
@@ -586,22 +585,17 @@ fn bisect<T>(
         len
     );
 
-    let half = len >> 1;
-    match cardinal.cmp(&half) {
-        Ordering::Equal => median(nodes, lo, hi),
-        Ordering::Less => {
-            let pivot = median(nodes, lo, hi);
-            bisect(nodes, half, lo, pivot, cardinal)
-        }
-        Ordering::Greater => {
-            let pivot = median(nodes, lo, hi);
-            bisect(nodes, half, hi, pivot, cardinal - half)
+    match len {
+        0 | 1 => lo,
+        len => {
+            let half = len >> 1;
+            let pivot = list.tree.median(lo, hi);
+            match cardinal.cmp(&half) {
+                Ordering::Less => bisect(list, half, lo, pivot, cardinal),
+                Ordering::Equal | Ordering::Greater => {
+                    bisect(list, half, hi, pivot, cardinal - half)
+                }
+            }
         }
     }
-}
-
-/// find the filled ordinal at the median of the given ordinal range
-#[inline]
-fn median<T>(nodes: &HashMap<usize, Node<T>>, lo: usize, hi: usize) -> usize {
-    todo!()
 }

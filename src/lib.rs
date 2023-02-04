@@ -9,10 +9,10 @@
 
 pub mod btree;
 pub mod hash;
-pub mod list;
+pub mod ord;
 pub mod path;
 
 pub use btree::{BTreeMap, BTreeSet};
 pub use hash::{HashMap, HashSet};
-pub use list::List;
+pub use ord::List;
 pub use path::{Host, Id, Link, Path, PathBuf, PathSegment};

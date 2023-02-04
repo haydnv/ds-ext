@@ -11,7 +11,7 @@
 use std::collections::hash_set::HashSet as Inner;
 use std::sync::Arc;
 
-use crate::list::List;
+use crate::ord::List;
 
 /// An ordered set which supports indexing by cardinality
 pub struct HashSet<K, V> {
