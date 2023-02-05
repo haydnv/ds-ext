@@ -482,7 +482,7 @@ impl<T> List<T> {
                 Self::MAX_LEN
             }
         } else {
-            bisect(&self, self.len(), 0, Self::MAX_LEN, cardinal)
+            self.tree.ordinal(cardinal)
         }
     }
 }
@@ -570,30 +570,5 @@ impl<'a, T> IntoIterator for &'a List<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
-    }
-}
-
-/// find the ordinal of index `cardinal` within the given ordinal range
-#[inline]
-fn bisect<T>(list: &List<T>, len: usize, lo: usize, hi: usize, cardinal: usize) -> usize {
-    debug_assert!(
-        cardinal < len,
-        "cardinal {} is out of bounds for length {}",
-        cardinal,
-        len
-    );
-
-    match len {
-        0 | 1 => lo,
-        len => {
-            let half = len >> 1;
-            let pivot = list.tree.median(lo, hi);
-            match cardinal.cmp(&half) {
-                Ordering::Less => bisect(list, half, lo, pivot, cardinal),
-                Ordering::Equal | Ordering::Greater => {
-                    bisect(list, half, pivot, hi, cardinal - half)
-                }
-            }
-        }
     }
 }

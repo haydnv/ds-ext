@@ -1,4 +1,4 @@
-//! A binary search tree of ordinal values
+//! A binary search tree which maps cardinal values to ordinal values
 //!
 //! Example usage:
 //! ```
@@ -61,9 +61,11 @@ impl Node {
     }
 }
 
-/// A binary tree of ordinal values
+type Nodes = HashMap<usize, Node>;
+
+/// A binary search tree which maps cardinal values to ordinal values
 pub struct Tree {
-    nodes: HashMap<usize, Node>,
+    nodes: Nodes,
     root: Option<usize>,
     max_size: usize,
 }
@@ -83,126 +85,126 @@ impl Tree {
         self.max_size
     }
 
-    /// Check the size of this [`Tree`].
+    /// Check the cardinal size of this [`Tree`].
     pub fn size(&self) -> usize {
         self.nodes.len()
     }
 
-    /// Insert a new `ordinal` into this [`Tree`].
+    /// Insert an `ordinal` into this [`Tree`] and return `false` if it was already present.
     ///
     /// Panics:
     ///  - `if ordinal >= self.max_size()`
-    pub fn insert(&mut self, ordinal: usize) {
+    pub fn insert(&mut self, ordinal: usize) -> bool {
         assert_bounds!(ordinal, self.max_size);
 
         if let Some(root) = self.root {
-            insert(&mut self.nodes, root, ordinal);
+            insert(&mut self.nodes, root, ordinal)
         } else {
             self.nodes.insert(ordinal, Node::new());
             self.root = Some(ordinal);
+            true
         }
     }
 
-    /// Find the median ordinal between `lo` and `hi`.
+    /// Find the ordinal of the given `cardinal`.
     ///
     /// Panics:
-    ///  - `if lo > hi`
-    ///  - `if lo >= self.max_size()`
-    ///  - `if hi >= self.max_size()`
-    pub fn median(&self, lo: usize, hi: usize) -> usize {
-        assert!(lo <= hi, "invalid range: [{}, {})", lo, hi);
-        assert_bounds!(lo, self.max_size);
-        assert_bounds!(hi, self.max_size);
+    ///  - `if cardinal >= self.size()`
+    pub fn ordinal(&self, cardinal: usize) -> usize {
+        assert!(
+            cardinal < self.size(),
+            "cardinal {} is out of bounds for ordinal tree with size {}",
+            cardinal,
+            self.size()
+        );
 
-        if let Some(root) = self.root {
-            median(&self.nodes, root)
-        } else {
-            self.max_size >> 1
-        }
+        todo!()
     }
 
-    /// Remove the given `ordinal` from this [`Tree`].
+    /// Remove the given `ordinal` from this [`Tree`] and return `true` if it was present.
     ///
     /// Panics:
     ///  - `if ordinal >= self.max_size()`
-    pub fn remove(&mut self, ordinal: usize) {
+    pub fn remove(&mut self, ordinal: usize) -> bool {
         assert_bounds!(ordinal, self.max_size);
 
         if let Some(root) = self.root {
             if root == ordinal {
                 self.root = remove_inner(&mut self.nodes, root);
+                true
             } else {
                 remove(&mut self.nodes, root, ordinal)
             }
+        } else {
+            false
         }
     }
 }
 
 #[inline]
-fn insert(nodes: &mut HashMap<usize, Node>, node: usize, ordinal: usize) {
-    let children = nodes.get_mut(&node).expect("node");
+fn insert(nodes: &mut Nodes, ordinal: usize, target: usize) -> bool {
+    let node = nodes.get_mut(&ordinal).expect("node");
 
-    match node.cmp(&ordinal) {
+    match ordinal.cmp(&target) {
         Ordering::Greater => {
-            if let Some(left) = children.left {
-                insert(nodes, left, ordinal)
+            if let Some(left) = node.left {
+                insert(nodes, left, target)
             } else {
-                children.left = Some(ordinal);
-                nodes.insert(ordinal, Node::new());
+                node.left = Some(target);
+                nodes.insert(target, Node::new());
+                true
             }
         }
-        Ordering::Equal => {}
+        Ordering::Equal => false,
         Ordering::Less => {
-            if let Some(right) = children.right {
-                insert(nodes, right, ordinal)
+            if let Some(right) = node.right {
+                insert(nodes, right, target)
             } else {
-                children.right = Some(ordinal);
-                nodes.insert(ordinal, Node::new());
+                node.right = Some(target);
+                nodes.insert(target, Node::new());
+                true
             }
         }
     }
 }
 
 #[inline]
-fn median(nodes: &HashMap<usize, Node>, node: usize) -> usize {
-    todo!()
-}
+fn remove(nodes: &mut Nodes, ordinal: usize, target: usize) -> bool {
+    let mut node = *nodes.get(&ordinal).expect("node");
 
-#[inline]
-fn remove(nodes: &mut HashMap<usize, Node>, node: usize, ordinal: usize) {
-    let mut children = *nodes.get(&node).expect("node");
-
-    match node.cmp(&ordinal) {
+    match ordinal.cmp(&target) {
         Ordering::Greater => {
-            if let Some(left) = children.left {
-                if left == ordinal {
-                    children.left = remove_inner(nodes, left);
-                    nodes.insert(node, children);
+            if let Some(left) = node.left {
+                if left == target {
+                    node.left = remove_inner(nodes, left);
+                    nodes.insert(ordinal, node);
+                    true
                 } else {
-                    remove(nodes, left, ordinal)
+                    remove(nodes, left, target)
                 }
             } else {
-                // nothing to remove
+                false
             }
         }
         Ordering::Less => {
-            if let Some(right) = children.right {
-                if right == ordinal {
-                    children.right = remove_inner(nodes, right);
-                    nodes.insert(node, children);
+            if let Some(right) = node.right {
+                if right == target {
+                    node.right = remove_inner(nodes, right);
+                    nodes.insert(ordinal, node);
+                    true
                 } else {
-                    remove(nodes, right, ordinal)
+                    remove(nodes, right, target)
                 }
             } else {
-                // nothing to remove
+                false
             }
         }
-        Ordering::Equal => unreachable!("a tree node cannot delete itself"),
+        Ordering::Equal => unreachable!("a node cannot delete itself"),
     }
 }
 
 #[inline]
-fn remove_inner(nodes: &mut HashMap<usize, Node>, node: usize) -> Option<usize> {
+fn remove_inner(nodes: &mut Nodes, node: usize) -> Option<usize> {
     let deleted = nodes.remove(&node).expect("node");
 
     let new_node = match (deleted.left, deleted.right) {
@@ -226,12 +228,12 @@ fn remove_inner(nodes: &mut HashMap<usize, Node>, node: usize) -> Option<usize> 
 }
 
 #[inline]
-fn remove_min(nodes: &mut HashMap<usize, Node>, node: usize) -> usize {
-    let mut children = nodes.get_mut(&node).expect("node");
-    if let Some(left) = children.left {
+fn remove_min(nodes: &mut Nodes, ordinal: usize) -> usize {
+    let mut node = nodes.get_mut(&ordinal).expect("node");
+    if let Some(left) = node.left {
         remove_min(nodes, left)
     } else {
-        children.left = None;
-        node
+        node.left = None;
+        ordinal
     }
 }
