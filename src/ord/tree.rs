@@ -143,9 +143,9 @@ impl Tree {
 
 #[inline]
 fn insert(nodes: &mut Nodes, ordinal: usize, target: usize) -> bool {
-    let node = nodes.get_mut(&ordinal).expect("node");
+    let mut node = *nodes.get(&ordinal).expect("node");
 
-    match ordinal.cmp(&target) {
+    let new = match ordinal.cmp(&target) {
         Ordering::Greater => {
             if let Some(left) = node.left {
                 insert(nodes, left, target)
@@ -165,19 +165,24 @@ fn insert(nodes: &mut Nodes, ordinal: usize, target: usize) -> bool {
                 true
             }
         }
+    };
+
+    if new {
+        nodes.insert(ordinal, node);
     }
+
+    new
 }
 
 #[inline]
 fn remove(nodes: &mut Nodes, ordinal: usize, target: usize) -> bool {
     let mut node = *nodes.get(&ordinal).expect("node");
 
-    match ordinal.cmp(&target) {
+    let removed = match ordinal.cmp(&target) {
         Ordering::Greater => {
             if let Some(left) = node.left {
                 if left == target {
                     node.left = remove_inner(nodes, left);
-                    nodes.insert(ordinal, node);
                     true
                 } else {
                     remove(nodes, left, target)
@@ -190,7 +195,6 @@ fn remove(nodes: &mut Nodes, ordinal: usize, target: usize) -> bool {
             if let Some(right) = node.right {
                 if right == target {
                     node.right = remove_inner(nodes, right);
-                    nodes.insert(ordinal, node);
                     true
                 } else {
                     remove(nodes, right, target)
@@ -200,7 +204,13 @@ fn remove(nodes: &mut Nodes, ordinal: usize, target: usize) -> bool {
             }
         }
         Ordering::Equal => unreachable!("a node cannot delete itself"),
+    };
+
+    if removed {
+        nodes.insert(ordinal, node);
     }
+
+    removed
 }
 
 #[inline]
