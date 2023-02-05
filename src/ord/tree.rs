@@ -48,6 +48,7 @@ macro_rules! assert_bounds {
 
 #[derive(Copy, Clone)]
 struct Node {
+    size: usize,
     left: Option<usize>,
     right: Option<usize>,
 }
@@ -55,6 +56,7 @@ struct Node {
 impl Node {
     fn new() -> Self {
         Self {
+            size: 0,
             left: None,
             right: None,
         }
@@ -97,13 +99,23 @@ impl Tree {
     pub fn insert(&mut self, ordinal: usize) -> bool {
         assert_bounds!(ordinal, self.max_size);
 
-        if let Some(root) = self.root {
+        let new = if let Some(root) = self.root {
             insert(&mut self.nodes, root, ordinal)
         } else {
             self.nodes.insert(ordinal, Node::new());
             self.root = Some(ordinal);
             true
-        }
+        };
+
+        debug_assert_eq!(
+            self.nodes
+                .get(&self.root.expect("root"))
+                .expect("root")
+                .size,
+            self.size() - 1,
+        );
+
+        new
     }
 
     /// Find the ordinal of the given `cardinal`.
@@ -168,6 +180,7 @@ fn insert(nodes: &mut Nodes, ordinal: usize, target: usize) -> bool {
     };
 
     if new {
+        node.size += 1;
         nodes.insert(ordinal, node);
     }
 
@@ -207,6 +220,7 @@ fn remove(nodes: &mut Nodes, ordinal: usize, target: usize) -> bool {
     };
 
     if removed {
+        node.size -= 1;
         nodes.insert(ordinal, node);
     }
 
