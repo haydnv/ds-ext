@@ -2,10 +2,38 @@
 //!
 //! The API of [`List`] is designed to resemble [`std::collections::VecDeque`] but [`List`] does
 //! not use a `VecDeque`; instead each node in the ord is assigned an ordinal value
-//! in the range `[0, usize::MAX)`, which is stored in a
+//! in the range `[0, usize::MAX >> 1)`, which is stored in a
 //! [`HashMap`](`std::collections::HashMap`) of ordinals to values.
 //!
 //! This design allows a cardinal index to be resolved to a value in O(log n) time.
+//!
+//! Example:
+//! ```
+//! use ds_ext::ord::List;
+//!
+//! let mut list = List::new();
+//! list.push_front("zero");
+//! assert_eq!(list.len(), 1);
+//!
+//! list.pop_front();
+//! assert_eq!(list.len(), 0);
+//! assert_eq!(list.get(0), None);
+//!
+//! list.push_back("zero");
+//! assert_eq!(list.len(), 1);
+//! assert_eq!(list.get(0), Some(&"zero"));
+//!
+//! list.pop_back();
+//! assert_eq!(list.len(), 0);
+//! assert_eq!(list.get(0), None);
+//!
+//! list.push_front("zero");
+//! list.push_back("three");
+//! list.insert(1, "two");
+//! list.insert(1, "one");
+//! assert_eq!(list.len(), 4);
+//! assert_eq!(list.into_iter().collect::<Vec<_>>(), ["zero", "one", "two", "three"]);
+//! ```
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -145,31 +173,32 @@ pub struct List<T> {
 }
 
 impl<T> List<T> {
-    const MAX_LEN: usize = usize::MAX;
+    const MAX_LEN: usize = 16;
 
     /// Create a new empty [`List`].
     pub fn new() -> Self {
         Self {
             list: HashMap::new(),
-            tree: Tree::new(Self::MAX_LEN),
+            tree: Tree::new(),
         }
     }
 
     /// Borrow the last element in this [`List`], if any.
     pub fn back(&self) -> Option<&T> {
-        let ordinal = if self.len() == 1 { 0 } else { Self::MAX_LEN };
+        let ordinal = if self.len() <= 1 { 0 } else { Self::MAX_LEN };
         self.list.get(&ordinal).map(Deref::deref)
     }
 
     /// Borrow the last element in this [`List`], if any.
     pub fn back_mut(&mut self) -> Option<&mut T> {
-        let ordinal = if self.len() == 1 { 0 } else { Self::MAX_LEN };
+        let ordinal = if self.len() <= 1 { 0 } else { Self::MAX_LEN };
         self.list.get_mut(&ordinal).map(DerefMut::deref_mut)
     }
 
     /// Remove all elements from this [`List`].
     pub fn clear(&mut self) {
         self.list.clear();
+        self.tree.clear();
     }
 
     /// Borrow the first element in this [`List`], if any.
@@ -212,37 +241,51 @@ impl<T> List<T> {
 
     /// Insert a new `value` at the given `index`.
     pub fn insert(&mut self, index: usize, value: T) {
+        debug_assert!(self.is_valid());
+
         match index {
             0 => self.push_front(value),
+            i if i == self.len() => self.push_back(value),
+            i if i == self.len() - 1 => {
+                let back = self.pop_back().expect("back");
+                self.push_back(value);
+                self.push_back(back);
+            }
             i => match self.len().cmp(&i) {
                 Ordering::Less => assert_bounds!(i, self.len()),
                 Ordering::Equal => self.push_back(value),
                 Ordering::Greater => {
-                    let prev = self.ordinal(i);
+                    let ordinal = self.ordinal(i);
+                    println!("move node at {} forward", i);
 
-                    let (ordinal, next) = {
-                        let node = self.list.get_mut(&prev).expect("prev");
-                        let next = node.next.expect("next");
-                        let ordinal = prev + ((next - prev) >> 1);
-
-                        node.next = Some(ordinal);
-
-                        (ordinal, next)
+                    let mut next = self.list.remove(&ordinal).expect("node");
+                    let new_ordinal = {
+                        let next = next.next.expect("next");
+                        ordinal + ((next - ordinal) >> 1)
                     };
 
                     {
-                        let node = self.list.get_mut(&next).expect("next");
-                        debug_assert_eq!(node.prev, Some(prev));
-                        node.prev = Some(ordinal);
+                        let next_next = self
+                            .list
+                            .get_mut(next.next.as_ref().expect("next"))
+                            .expect("next");
+
+                        next_next.prev = Some(new_ordinal);
                     }
 
                     let node = Node {
                         value,
-                        prev: Some(prev),
-                        next: Some(next),
+                        prev: next.prev,
+                        next: Some(new_ordinal),
                     };
 
+                    next.prev = Some(ordinal);
+                    self.list.insert(new_ordinal, next);
+                    self.tree.insert(new_ordinal);
+
                     self.list.insert(ordinal, node);
+
+                    debug_assert!(self.is_valid());
                 }
             },
         }
@@ -250,17 +293,14 @@ impl<T> List<T> {
 
     /// Iterate over all elements in this [`List`].
     pub fn iter(&self) -> Iter<T> {
+        debug_assert!(self.is_valid());
+
         let next = if self.is_empty() { None } else { Some(0) };
-        let stop = if self.len() == 1 {
-            Some(0)
-        } else {
-            Some(Self::MAX_LEN)
-        };
 
         Iter {
             inner: &self.list,
             next,
-            stop,
+            stop: None,
         }
     }
 
@@ -321,8 +361,14 @@ impl<T> List<T> {
             return None;
         }
 
+        debug_assert!(self.is_valid());
+
         let ordinal = self.ordinal(index);
         let node = self.list.remove(&ordinal).expect("node");
+        self.tree.remove(ordinal);
+
+        debug_assert!(self.is_valid());
+
         let prev = node.prev.expect("prev");
         let next = node.next.expect("next");
 
@@ -341,18 +387,31 @@ impl<T> List<T> {
 
     /// Remove and return the last value in this [`List`].
     pub fn pop_back(&mut self) -> Option<T> {
+        debug_assert!(self.is_valid());
+
         if self.is_empty() {
             return None;
         } else if self.len() == 1 {
-            return self.list.remove(&0).map(|node| node.value);
+            self.tree.remove(0);
+            debug_assert!(self.tree.is_empty());
+            let back = self.list.remove(&0).map(|node| node.value);
+            debug_assert!(self.list.is_empty());
+            return back;
         }
 
         let next = self.list.remove(&Self::MAX_LEN)?;
 
-        match next.prev.as_ref().expect("node") {
-            0 => {}
+        match next.prev.expect("node") {
+            0 => {
+                let front = self.list.get_mut(&0).expect("front");
+                front.next = None;
+
+                self.tree.remove(Self::MAX_LEN);
+            }
             ordinal => {
-                let mut node = self.list.remove(ordinal).expect("node");
+                self.tree.remove(ordinal);
+
+                let mut node = self.list.remove(&ordinal).expect("node");
                 debug_assert_eq!(node.next, Some(Self::MAX_LEN));
                 node.next = None;
 
@@ -366,16 +425,29 @@ impl<T> List<T> {
             }
         }
 
+        debug_assert!(self.is_valid());
+
         Some(next.value)
     }
 
     /// Remove and return the first value in this [`List`].
     pub fn pop_front(&mut self) -> Option<T> {
+        debug_assert!(self.is_valid());
+
         if self.is_empty() {
+            debug_assert!(self.tree.is_empty());
             return None;
         }
 
         let prev = self.list.remove(&0)?;
+        if self.list.is_empty() {
+            self.tree.remove(0);
+            debug_assert!(self.tree.is_empty());
+            return Some(prev.value);
+        }
+
+        self.tree.remove(prev.next.expect("ordinal"));
+
         let mut node = self
             .list
             .remove(prev.next.as_ref().expect("node"))
@@ -386,6 +458,8 @@ impl<T> List<T> {
 
         self.list.insert(0, node);
 
+        debug_assert!(self.is_valid());
+
         Some(prev.value)
     }
 
@@ -394,6 +468,8 @@ impl<T> List<T> {
         match self.len() {
             0 => self.push_front(value),
             1 => {
+                debug_assert!(self.is_valid());
+
                 self.list.get_mut(&0).expect("front").next = Some(Self::MAX_LEN);
 
                 let node = Node {
@@ -402,10 +478,17 @@ impl<T> List<T> {
                     next: None,
                 };
 
-                self.list.insert(0, node);
+                self.tree.insert(Self::MAX_LEN);
+                self.list.insert(Self::MAX_LEN, node);
+
+                debug_assert!(self.is_valid());
             }
             _ => {
-                let node = self.list.remove(&Self::MAX_LEN).expect("back");
+                debug_assert!(self.is_valid());
+
+                let mut node = self.list.remove(&Self::MAX_LEN).expect("back");
+                node.next = Some(Self::MAX_LEN);
+
                 let prev = node.prev.expect("prev");
                 let ordinal = prev + ((Self::MAX_LEN - prev) >> 1);
 
@@ -414,6 +497,7 @@ impl<T> List<T> {
                     prev.next = Some(ordinal);
                 }
 
+                self.tree.insert(ordinal);
                 self.list.insert(ordinal, node);
 
                 let next = Node {
@@ -423,12 +507,16 @@ impl<T> List<T> {
                 };
 
                 self.list.insert(Self::MAX_LEN, next);
+
+                debug_assert!(self.is_valid());
             }
         }
     }
 
     /// Append the given `value` to the front of this [`List`].
     pub fn push_front(&mut self, value: T) {
+        debug_assert!(self.is_valid());
+
         match self.len() {
             0 => {
                 let node = Node {
@@ -437,7 +525,10 @@ impl<T> List<T> {
                     next: None,
                 };
 
+                self.tree.insert(0);
                 self.list.insert(0, node);
+
+                debug_assert!(self.is_valid());
             }
             1 => {
                 let mut back = self.list.remove(&0).expect("back");
@@ -451,6 +542,9 @@ impl<T> List<T> {
 
                 self.list.insert(0, front);
                 self.list.insert(Self::MAX_LEN, back);
+                self.tree.insert(Self::MAX_LEN);
+
+                debug_assert!(self.is_valid());
             }
             _ => {
                 let mut next = self.list.remove(&0).expect("next");
@@ -466,6 +560,9 @@ impl<T> List<T> {
 
                 self.list.insert(0, front);
                 self.list.insert(ordinal, next);
+                self.tree.insert(ordinal);
+
+                debug_assert!(self.is_valid());
             }
         }
     }
@@ -482,8 +579,43 @@ impl<T> List<T> {
                 Self::MAX_LEN
             }
         } else {
+            println!("use the tree to find the ordinal of index {}", cardinal);
             self.tree.ordinal(cardinal)
         }
+    }
+
+    #[cfg(debug_assertions)]
+    fn is_valid(&self) -> bool {
+        assert_eq!(self.list.len(), self.tree.size());
+
+        if self.is_empty() {
+            return true;
+        } else if self.len() == 1 {
+            let node = self.list.get(&0).expect("head");
+            assert_eq!(node.prev, None);
+            assert_eq!(node.next, None);
+            return true;
+        }
+
+        let mut prev = None;
+        let mut ordinal = 0;
+        for cardinal in 0..self.len() {
+            assert_eq!(self.ordinal(cardinal), ordinal);
+
+            let node = self.list.get(&ordinal).expect("node");
+            assert_eq!(node.prev, prev);
+            prev = Some(ordinal);
+
+            if ordinal == Self::MAX_LEN {
+                assert_eq!(node.next, None);
+            } else {
+                ordinal = node.next.expect("next");
+            }
+        }
+
+        assert_eq!(ordinal, Self::MAX_LEN);
+
+        true
     }
 }
 
