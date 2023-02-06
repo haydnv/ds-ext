@@ -82,6 +82,14 @@ impl Tree {
         }
     }
 
+    /// Construct a new [`Tree`] with the given `capacity`.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            nodes: HashMap::with_capacity(capacity),
+            root: None,
+        }
+    }
+
     /// Remove all nodes from this [`Tree`].
     pub fn clear(&mut self) {
         self.nodes.clear();

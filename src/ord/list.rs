@@ -32,6 +32,9 @@
 //! list.insert(1, "two");
 //! list.insert(1, "one");
 //! assert_eq!(list.len(), 4);
+//! assert_eq!(list.iter().size_hint(), (4, Some(4)));
+//! assert_eq!(list.range(1..3).size_hint(), (2, Some(2)));
+//! assert_eq!(list.range(1..3).collect::<Vec<_>>(), [&"one", &"two"]);
 //! assert_eq!(list.into_iter().collect::<Vec<_>>(), ["zero", "one", "two", "three"]);
 //! ```
 
@@ -75,6 +78,7 @@ impl<T> DerefMut for Node<T> {
 /// An iterator over the elements of a [`List`]
 pub struct IntoIter<T> {
     inner: HashMap<usize, Node<T>>,
+    size: usize,
     next: Option<usize>,
     last: Option<usize>,
 }
@@ -83,10 +87,12 @@ impl<T> Iterator for IntoIter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let next = self.next?;
-        let node = self.inner.remove(&next).expect("next");
+        let ordinal = self.next?;
+        let node = self.inner.remove(&ordinal).expect("node");
 
-        self.next = if self.last == Some(next) {
+        self.size -= 1;
+
+        self.next = if self.last == Some(ordinal) {
             None
         } else {
             node.next
@@ -98,14 +104,20 @@ impl<T> Iterator for IntoIter<T> {
 
         Some(node.value)
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.size, Some(self.size))
+    }
 }
 
 impl<T> DoubleEndedIterator for IntoIter<T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let next = self.last?;
-        let node = self.inner.remove(&next).expect("next");
+        let ordinal = self.last?;
+        let node = self.inner.remove(&ordinal).expect("node");
 
-        self.last = if self.next == Some(next) {
+        self.size -= 1;
+
+        self.last = if self.next == Some(ordinal) {
             None
         } else {
             node.prev
@@ -122,6 +134,7 @@ impl<T> DoubleEndedIterator for IntoIter<T> {
 /// An iterator over the elements of a [`List`]
 pub struct Iter<'a, T> {
     inner: &'a HashMap<usize, Node<T>>,
+    size: usize,
     next: Option<usize>,
     stop: Option<usize>,
 }
@@ -130,10 +143,10 @@ impl<'a, T> Iterator for Iter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let next = self.next?;
-        let node = self.inner.get(&next).expect("next");
+        let ordinal = self.next?;
+        let node = self.inner.get(&ordinal).expect("next");
 
-        self.next = if self.stop == Some(next) {
+        self.next = if self.stop == Some(ordinal) {
             None
         } else {
             node.next
@@ -141,18 +154,26 @@ impl<'a, T> Iterator for Iter<'a, T> {
 
         if self.next.is_none() {
             self.stop = None;
+        } else {
+            self.size -= 1;
         }
 
         Some(&node.value)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.size, Some(self.size))
     }
 }
 
 impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let next = self.stop?;
-        let node = self.inner.get(&next).expect("next");
+        let ordinal = self.stop?;
+        let node = self.inner.get(&ordinal).expect("next");
 
-        self.stop = if self.next == Some(next) {
+        self.size -= 1;
+
+        self.stop = if self.next == Some(ordinal) {
             None
         } else {
             node.prev
@@ -180,6 +201,14 @@ impl<T> List<T> {
         Self {
             list: HashMap::new(),
             tree: Tree::new(),
+        }
+    }
+
+    /// Create a new empty [`List`] with the given `capacity`.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            list: HashMap::with_capacity(capacity),
+            tree: Tree::with_capacity(capacity),
         }
     }
 
@@ -299,6 +328,7 @@ impl<T> List<T> {
 
         Iter {
             inner: &self.list,
+            size: self.len(),
             next,
             stop: None,
         }
@@ -316,36 +346,57 @@ impl<T> List<T> {
 
     /// Iterate over the given `range` of elements in this [`List`].
     pub fn range<R: RangeBounds<usize>>(&self, range: R) -> Iter<T> {
-        if self.is_empty() {
-            return Iter {
-                inner: &self.list,
+        #[inline]
+        fn empty<T>(list: &HashMap<usize, Node<T>>) -> Iter<T> {
+            Iter {
+                inner: list,
+                size: 0,
                 next: None,
                 stop: None,
-            };
+            }
         }
 
-        let next = match range.start_bound() {
-            Bound::Unbounded => Some(0),
-            Bound::Included(start) => Some(self.ordinal(*start)),
-            Bound::Excluded(start) => {
-                let ordinal = self.ordinal(*start);
-                self.list.get(&ordinal).expect("node").next
-            }
+        if self.is_empty() {
+            return empty(&self.list);
+        }
+
+        let start = match range.start_bound() {
+            Bound::Included(start) => match self.len().cmp(start) {
+                Ordering::Less | Ordering::Equal => return empty(&self.list),
+                Ordering::Greater => Some(*start),
+            },
+            Bound::Excluded(start) => match self.len().cmp(start) {
+                Ordering::Less | Ordering::Equal => return empty(&self.list),
+                Ordering::Greater => {
+                    if *start == self.len() - 1 {
+                        return empty(&self.list);
+                    } else {
+                        Some(start + 1)
+                    }
+                }
+            },
+            _ => None,
         };
 
-        let last_ordinal = if self.len() == 1 { 0 } else { Self::MAX_LEN };
-
-        let stop = match range.end_bound() {
-            Bound::Unbounded => Some(last_ordinal),
-            Bound::Included(end) => Some(self.ordinal(*end)),
-            Bound::Excluded(end) => {
-                let ordinal = self.ordinal(*end);
-                self.list.get(&ordinal).expect("node").prev
-            }
+        let end = match range.end_bound() {
+            Bound::Included(end) if end < &self.len() => Some(*end),
+            Bound::Excluded(end) if end <= &self.len() => Some(*end - 1),
+            _ => None,
         };
+
+        let size = match (start, end) {
+            (Some(start), Some(end)) => (end - start) + 1,
+            (None, Some(end)) => end + 1,
+            (Some(start), None) => self.len() - start,
+            (None, None) => self.len(),
+        };
+
+        let next = start.map(|i| self.ordinal(i));
+        let stop = end.map(|i| self.ordinal(i));
 
         Iter {
             inner: &self.list,
+            size,
             next,
             stop,
         }
@@ -630,7 +681,11 @@ impl<T> Extend<T> for List<T> {
 impl<T> FromIterator<T> for List<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let source = iter.into_iter();
-        let mut list = List::new();
+        let mut list = match source.size_hint() {
+            (_, Some(max)) => Self::with_capacity(max),
+            (min, None) if min > 0 => Self::with_capacity(min),
+            _ => Self::new(),
+        };
 
         for item in source {
             list.push_back(item);
@@ -682,6 +737,7 @@ impl<T> IntoIterator for List<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         let next = if self.is_empty() { None } else { Some(0) };
+        let size = self.len();
         let last = if self.len() == 1 {
             Some(0)
         } else {
@@ -690,6 +746,7 @@ impl<T> IntoIterator for List<T> {
 
         IntoIter {
             inner: self.list,
+            size,
             next,
             last,
         }
