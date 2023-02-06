@@ -12,10 +12,11 @@
 //! use ds_ext::ord::List;
 //!
 //! let mut list = List::new();
+//!
 //! list.push_front("zero");
 //! assert_eq!(list.len(), 1);
 //!
-//! list.pop_front();
+//! assert_eq!(list.pop_front(), Some("zero"));
 //! assert_eq!(list.len(), 0);
 //! assert_eq!(list.get(0), None);
 //!
@@ -23,14 +24,16 @@
 //! assert_eq!(list.len(), 1);
 //! assert_eq!(list.get(0), Some(&"zero"));
 //!
-//! list.pop_back();
+//! assert_eq!(list.pop_back(), Some("zero"));
 //! assert_eq!(list.len(), 0);
 //! assert_eq!(list.get(0), None);
 //!
 //! list.push_front("zero");
 //! list.push_back("three");
-//! list.insert(1, "two");
+//! list.insert(1, "two point five");
 //! list.insert(1, "one");
+//! list.insert(2, "two");
+//! assert_eq!(list.remove(3), Some("two point five"));
 //! assert_eq!(list.len(), 4);
 //! assert_eq!(list.iter().size_hint(), (4, Some(4)));
 //! assert_eq!(list.range(1..3).size_hint(), (2, Some(2)));
@@ -309,6 +312,7 @@ impl<T> List<T> {
                     };
 
                     next.prev = Some(ordinal);
+
                     self.list.insert(new_ordinal, next);
                     self.tree.insert(new_ordinal);
 
@@ -418,8 +422,6 @@ impl<T> List<T> {
         let node = self.list.remove(&ordinal).expect("node");
         self.tree.remove(ordinal);
 
-        debug_assert!(self.is_valid());
-
         let prev = node.prev.expect("prev");
         let next = node.next.expect("next");
 
@@ -432,6 +434,8 @@ impl<T> List<T> {
             let next = self.list.get_mut(&next).expect("next");
             next.prev = Some(prev);
         }
+
+        debug_assert!(self.is_valid());
 
         Some(node.value)
     }
@@ -657,14 +661,12 @@ impl<T> List<T> {
             assert_eq!(node.prev, prev);
             prev = Some(ordinal);
 
-            if ordinal == Self::MAX_LEN {
-                assert_eq!(node.next, None);
+            if let Some(next) = node.next {
+                ordinal = next
             } else {
-                ordinal = node.next.expect("next");
+                assert_eq!(node.next, None);
             }
         }
-
-        assert_eq!(ordinal, Self::MAX_LEN);
 
         true
     }
