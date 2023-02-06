@@ -1,5 +1,5 @@
-/// A hash map ordered by key using a linked list
-
+use core::fmt;
+/// A hash map ordered by key using a linked hash set
 use std::borrow::Borrow;
 use std::collections::HashMap as Inner;
 use std::hash::Hash;
@@ -60,13 +60,13 @@ pub enum Entry<'a, K, V> {
     Occupied(OccupiedEntry<'a, K, V>),
 }
 
-/// A [`std::collections::HashMap`] ordered by key using a [`List`]
+/// A [`std::collections::HashMap`] ordered by key using a [`LinkedHashSet`]
 pub struct LinkedHashMap<K, V> {
     inner: Inner<Arc<K>, V>,
     order: LinkedHashSet<Arc<K>>,
 }
 
-impl<K: Hash, V> LinkedHashMap<K, V> {
+impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
     /// Construct a new [`LinkedHashMap`].
     pub fn new() -> Self {
         Self {
@@ -184,7 +184,7 @@ impl<K: Hash, V> LinkedHashMap<K, V> {
     }
 }
 
-impl<K: Hash, V> FromIterator<(K, V)> for LinkedHashMap<K, V> {
+impl<K: Eq + Hash + Ord + fmt::Debug, V> FromIterator<(K, V)> for LinkedHashMap<K, V> {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
         let iter = iter.into_iter();
         let mut map = match iter.size_hint() {

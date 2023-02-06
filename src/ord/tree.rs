@@ -48,7 +48,7 @@ macro_rules! assert_bounds {
     };
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 struct Node {
     size: usize,
     left: Option<usize>,
@@ -68,6 +68,7 @@ impl Node {
 type Nodes = HashMap<usize, Node>;
 
 /// A binary search tree which maps cardinal values to ordinal values
+#[derive(Clone)]
 pub struct Tree {
     nodes: Nodes,
     root: Option<usize>,

@@ -10,5 +10,5 @@
 pub mod ord;
 pub mod path;
 
-pub use ord::{LinkedHashMap, List};
+pub use ord::{LinkedHashMap, LinkedHashSet, List};
 pub use path::{Host, Id, Link, Path, PathBuf, PathSegment};

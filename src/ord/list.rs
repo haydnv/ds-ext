@@ -58,6 +58,7 @@ macro_rules! assert_bounds {
     };
 }
 
+#[derive(Copy, Clone, Debug)]
 struct Node<T> {
     value: T,
     prev: Option<usize>,
@@ -191,6 +192,7 @@ impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
 }
 
 /// A linked ord with cardinal indexing and O(log n) get/insert/remove by index
+#[derive(Clone, Debug)]
 pub struct List<T> {
     list: HashMap<usize, Node<T>>,
     tree: Tree,
@@ -288,7 +290,6 @@ impl<T> List<T> {
                 Ordering::Equal => self.push_back(value),
                 Ordering::Greater => {
                     let ordinal = self.ordinal(i);
-                    println!("move node at {} forward", i);
 
                     let mut next = self.list.remove(&ordinal).expect("node");
                     let new_ordinal = {
@@ -634,7 +635,6 @@ impl<T> List<T> {
                 Self::MAX_LEN
             }
         } else {
-            println!("use the tree to find the ordinal of index {}", cardinal);
             self.tree.ordinal(cardinal)
         }
     }
@@ -671,6 +671,18 @@ impl<T> List<T> {
         true
     }
 }
+
+impl<T: PartialEq> PartialEq for List<T> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
+
+        self.iter().zip(other.iter()).all(|(l, r)| l == r)
+    }
+}
+
+impl<T: Eq> Eq for List<T> {}
 
 impl<T> Extend<T> for List<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
