@@ -56,6 +56,16 @@ impl<T> Iterator for IntoIter<T> {
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl<T> DoubleEndedIterator for IntoIter<T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.inner.next_back()
+    }
 }
 
 /// An iterator over the values in a [`LinkedHashSet`]
@@ -68,6 +78,16 @@ impl<'a, T> Iterator for Iter<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.inner.next_back()
     }
 }
 
@@ -214,7 +234,6 @@ impl<T: Eq + Hash + Ord + fmt::Debug> LinkedHashSet<T> {
         }
     }
 
-    #[cfg(debug_assertions)]
     fn is_valid(&self) -> bool {
         assert_eq!(self.inner.len(), self.order.len());
 

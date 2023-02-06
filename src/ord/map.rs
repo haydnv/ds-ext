@@ -14,15 +14,32 @@ pub struct IntoIter<K, V> {
     order: super::set::IntoIter<Arc<K>>,
 }
 
+impl<K: Eq + Hash + fmt::Debug, V> IntoIter<K, V> {
+    fn next_entry(&mut self, key: Arc<Arc<K>>) -> Option<(K, V)> {
+        let value = self.inner.remove(&**key).expect("value");
+        let key = Arc::try_unwrap(key).expect("key");
+        let key = Arc::try_unwrap(key).expect("key");
+        Some((key, value))
+    }
+}
+
 impl<K: Eq + Hash + fmt::Debug, V> Iterator for IntoIter<K, V> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
         let key = self.order.next()?;
-        let value = self.inner.remove(&**key).expect("value");
-        let key = Arc::try_unwrap(key).expect("key");
-        let key = Arc::try_unwrap(key).expect("key");
-        Some((key, value))
+        self.next_entry(key)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.order.size_hint()
+    }
+}
+
+impl<K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for IntoIter<K, V> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let key = self.order.next_back()?;
+        self.next_entry(key)
     }
 }
 
@@ -40,6 +57,18 @@ impl<'a, K: Eq + Hash, V> Iterator for Iter<'a, K, V> {
         let value = self.inner.get(key).expect("entry");
         Some((key, value))
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.order.size_hint()
+    }
+}
+
+impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Iter<'a, K, V> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let key = &**self.order.next_back()?;
+        let value = self.inner.get(key).expect("entry");
+        Some((key, value))
+    }
 }
 
 /// An iterator over the keys in a [`LinkedHashMap`]
@@ -52,6 +81,16 @@ impl<'a, K> Iterator for Keys<'a, K> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.order.next().map(|key| &***key)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.order.size_hint()
+    }
+}
+
+impl<'a, K> DoubleEndedIterator for Keys<'a, K> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.order.next_back().map(|key| &***key)
     }
 }
 
@@ -66,6 +105,17 @@ impl<'a, K: Eq + Hash, V> Iterator for Values<'a, K, V> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let key = self.order.next()?;
+        self.inner.get(&**key)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.order.size_hint()
+    }
+}
+
+impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Values<'a, K, V> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let key = self.order.next_back()?;
         self.inner.get(&**key)
     }
 }
