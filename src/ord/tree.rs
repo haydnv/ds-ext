@@ -163,20 +163,13 @@ impl Tree {
 
     #[cfg(debug_assertions)]
     fn is_valid(&self) -> bool {
-        fn count(nodes: &Nodes, ordinal: Option<&usize>) -> usize {
-            if let Some(ordinal) = ordinal {
-                let node = nodes.get(ordinal).expect("node");
-                let size = count(nodes, node.left.as_ref()) + count(nodes, node.right.as_ref()) + 1;
-                assert_eq!(node.size, size);
-                size
-            } else {
-                0
-            }
+        if let Some(root) = self.root.as_ref() {
+            assert_eq!(self.nodes.get(root).expect("root").size, self.size());
+            is_valid(&self.nodes, root)
+        } else {
+            assert!(self.is_empty());
+            true
         }
-
-        assert_eq!(count(&self.nodes, self.root.as_ref()), self.size());
-
-        true
     }
 }
 
@@ -208,6 +201,35 @@ fn fmt_node(nodes: &Nodes, ordinal: &usize, f: &mut fmt::Formatter) -> fmt::Resu
     }
 
     Ok(())
+}
+
+#[cfg(debug_assertions)]
+fn is_valid(nodes: &Nodes, ordinal: &usize) -> bool {
+    fn count(nodes: &Nodes, ordinal: Option<&usize>) -> usize {
+        if let Some(ordinal) = ordinal {
+            let node = nodes.get(ordinal).expect("node");
+            let size = count(nodes, node.left.as_ref()) + count(nodes, node.right.as_ref()) + 1;
+            assert_eq!(
+                node.size, size,
+                "node {}: {:?} should have a size of {}",
+                ordinal, node, size
+            );
+            size
+        } else {
+            0
+        }
+    }
+
+    let expected = nodes.get(ordinal).expect("node").size;
+    let actual = count(&nodes, Some(ordinal));
+
+    assert_eq!(
+        expected, actual,
+        "node {} should have a size of {}, not {}",
+        ordinal, expected, actual
+    );
+
+    true
 }
 
 #[inline]
@@ -329,7 +351,9 @@ fn remove(nodes: &mut Nodes, ordinal: usize, target: usize) -> bool {
 
 #[inline]
 fn remove_inner(nodes: &mut Nodes, node: usize) -> Option<usize> {
-    let mut deleted = *nodes.get(&node).expect("node");
+    debug_assert!(is_valid(nodes, &node));
+
+    let mut deleted = nodes.remove(&node).expect("node");
 
     let new_node = match (deleted.left, deleted.right) {
         (None, None) => None,
@@ -343,20 +367,22 @@ fn remove_inner(nodes: &mut Nodes, node: usize) -> Option<usize> {
         }
         (Some(_left), Some(right)) => {
             let inorder_successor = min(nodes, &right);
-            remove(nodes, node, inorder_successor);
 
-            deleted.size -= 1;
-
-            if deleted.right == Some(inorder_successor) {
-                deleted.right = None;
+            if inorder_successor == right {
+                deleted.right = remove_inner(nodes, right);
+            } else {
+                assert!(remove(nodes, right, inorder_successor));
+                debug_assert!(is_valid(nodes, &right));
             }
 
+            deleted.size -= 1;
             nodes.insert(inorder_successor, deleted);
+
+            debug_assert!(is_valid(nodes, &inorder_successor));
+
             Some(inorder_successor)
         }
     };
-
-    assert!(nodes.remove(&node).is_some());
 
     new_node
 }
@@ -373,23 +399,37 @@ fn min(nodes: &Nodes, ordinal: &usize) -> usize {
 
 mod tests {
     #[test]
-    fn test_search() {
+    fn test_tree() {
         use super::*;
+        use rand::Rng;
+        use std::collections::BTreeSet;
 
-        let mut tree = Tree::new();
+        let mut rng = rand::thread_rng();
 
-        tree.insert(0);
-        tree.insert(8);
-        tree.insert(16);
-        tree.insert(2);
-        tree.insert(24);
-        tree.insert(12);
+        for size in 0..100 {
+            let mut order = BTreeSet::new();
+            let mut tree = Tree::new();
 
-        assert_eq!(tree.ordinal(0), 0);
-        assert_eq!(tree.ordinal(1), 2);
-        assert_eq!(tree.ordinal(2), 8);
-        assert_eq!(tree.ordinal(3), 12);
-        assert_eq!(tree.ordinal(4), 16);
-        assert_eq!(tree.ordinal(5), 24);
+            for _ in 0..size {
+                let ord = rng.gen();
+                order.insert(ord);
+                tree.insert(ord);
+            }
+
+            for _ in 0..(size >> 1) {
+                let ord = tree.ordinal(rng.gen_range(0..tree.size()));
+
+                order.remove(&ord);
+                tree.remove(ord);
+
+                assert_eq!(order.len(), tree.size());
+            }
+
+            let mut i = 0;
+            for ord in order {
+                assert_eq!(ord, tree.ordinal(i));
+                i += 1;
+            }
+        }
     }
 }

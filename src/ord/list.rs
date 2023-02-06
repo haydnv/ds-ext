@@ -199,7 +199,7 @@ pub struct List<T> {
 }
 
 impl<T> List<T> {
-    const MAX_LEN: usize = 16;
+    const MAX_LEN: usize = usize::MAX;
 
     /// Create a new empty [`List`].
     pub fn new() -> Self {
@@ -279,6 +279,7 @@ impl<T> List<T> {
 
         match index {
             0 => self.push_front(value),
+            i if self.is_empty() => assert_bounds!(i, self.len()),
             i if i == self.len() => self.push_back(value),
             i if i == self.len() - 1 => {
                 let back = self.pop_back().expect("back");
@@ -502,15 +503,21 @@ impl<T> List<T> {
             return Some(prev.value);
         }
 
-        self.tree.remove(prev.next.expect("ordinal"));
-
-        let mut node = self
-            .list
-            .remove(prev.next.as_ref().expect("node"))
-            .expect("node");
+        let ordinal = prev.next.expect("node");
+        let mut node = self.list.remove(&ordinal).expect("node");
+        self.tree.remove(ordinal);
 
         debug_assert_eq!(node.prev, Some(0));
         node.prev = None;
+
+        {
+            let next = self
+                .list
+                .get_mut(node.next.as_ref().expect("next"))
+                .expect("next");
+
+            next.prev = Some(0)
+        }
 
         self.list.insert(0, node);
 
@@ -588,6 +595,7 @@ impl<T> List<T> {
             }
             1 => {
                 let mut back = self.list.remove(&0).expect("back");
+                debug_assert!(back.next.is_none());
                 back.prev = Some(0);
 
                 let front = Node {
@@ -603,20 +611,28 @@ impl<T> List<T> {
                 debug_assert!(self.is_valid());
             }
             _ => {
-                let mut next = self.list.remove(&0).expect("next");
+                let mut node = self.list.remove(&0).expect("next");
+                debug_assert!(node.prev.is_none());
+                node.prev = Some(0);
 
-                let ordinal = next.next.expect("next") >> 1;
-                next.prev = Some(0);
-
-                let front = Node {
-                    value,
-                    prev: None,
-                    next: Some(ordinal),
+                let new_ordinal = {
+                    let ordinal = node.next.expect("next");
+                    let next = self.list.get_mut(&ordinal).expect("next");
+                    debug_assert_eq!(next.prev, Some(0));
+                    let ordinal = ordinal >> 1;
+                    next.prev = Some(ordinal);
+                    ordinal
                 };
 
-                self.list.insert(0, front);
-                self.list.insert(ordinal, next);
-                self.tree.insert(ordinal);
+                let prev = Node {
+                    value,
+                    prev: None,
+                    next: Some(new_ordinal),
+                };
+
+                self.list.insert(0, prev);
+                self.list.insert(new_ordinal, node);
+                self.tree.insert(new_ordinal);
 
                 debug_assert!(self.is_valid());
             }
@@ -642,6 +658,7 @@ impl<T> List<T> {
     #[cfg(debug_assertions)]
     fn is_valid(&self) -> bool {
         assert_eq!(self.list.len(), self.tree.size());
+        assert!(self.len() <= Self::MAX_LEN);
 
         if self.is_empty() {
             return true;
@@ -773,5 +790,43 @@ impl<'a, T> IntoIterator for &'a List<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
+    }
+}
+
+mod tests {
+    #[test]
+    fn test_insert_and_remove() {
+        use super::*;
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        for i in 0..9 {
+            let mut list = List::new();
+            let mut vector = Vec::new();
+
+            let max = Ord::min(i, List::<String>::MAX_LEN);
+            for i in 0..max {
+                list.insert(i, i.to_string());
+                vector.insert(i, i.to_string());
+            }
+
+            for _ in 0..i {
+                let r = rng.gen_range(0..list.len());
+                list.insert(r, r.to_string());
+                vector.insert(r, r.to_string());
+            }
+
+            for _ in 0..(i >> 1) {
+                let i = rng.gen_range(0..list.len());
+                list.remove(i);
+                vector.remove(i);
+            }
+
+            assert_eq!(list.len(), vector.len());
+            for i in 0..vector.len() {
+                assert_eq!(vector[i], list[i]);
+            }
+        }
     }
 }
