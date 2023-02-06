@@ -161,7 +161,6 @@ impl Tree {
         }
     }
 
-    #[cfg(debug_assertions)]
     fn is_valid(&self) -> bool {
         if let Some(root) = self.root.as_ref() {
             assert_eq!(self.nodes.get(root).expect("root").size, self.size());
@@ -203,7 +202,6 @@ fn fmt_node(nodes: &Nodes, ordinal: &usize, f: &mut fmt::Formatter) -> fmt::Resu
     Ok(())
 }
 
-#[cfg(debug_assertions)]
 fn is_valid(nodes: &Nodes, ordinal: &usize) -> bool {
     fn count(nodes: &Nodes, ordinal: Option<&usize>) -> usize {
         if let Some(ordinal) = ordinal {

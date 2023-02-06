@@ -295,6 +295,9 @@ impl<T> List<T> {
                     let mut next = self.list.remove(&ordinal).expect("node");
                     let new_ordinal = {
                         let next = next.next.expect("next");
+
+                        assert!(next - ordinal > 2, "TODO: rebalance");
+
                         ordinal + ((next - ordinal) >> 1)
                     };
 
@@ -472,8 +475,7 @@ impl<T> List<T> {
                 debug_assert_eq!(node.next, Some(Self::MAX_LEN));
                 node.next = None;
 
-                {
-                    let prev = node.prev.as_ref().expect("prev");
+                if let Some(prev) = node.prev.as_ref() {
                     let prev = self.list.get_mut(prev).expect("prev");
                     prev.next = Some(Self::MAX_LEN);
                 }
@@ -553,6 +555,7 @@ impl<T> List<T> {
                 node.next = Some(Self::MAX_LEN);
 
                 let prev = node.prev.expect("prev");
+                assert!(Self::MAX_LEN - prev > 2, "TODO: rebalance");
                 let ordinal = prev + ((Self::MAX_LEN - prev) >> 1);
 
                 {
@@ -617,6 +620,7 @@ impl<T> List<T> {
 
                 let new_ordinal = {
                     let ordinal = node.next.expect("next");
+                    debug_assert!(ordinal > 2, "TODO: rebalance");
                     let next = self.list.get_mut(&ordinal).expect("next");
                     debug_assert_eq!(next.prev, Some(0));
                     let ordinal = ordinal >> 1;
@@ -655,7 +659,6 @@ impl<T> List<T> {
         }
     }
 
-    #[cfg(debug_assertions)]
     fn is_valid(&self) -> bool {
         assert_eq!(self.list.len(), self.tree.size());
         assert!(self.len() <= Self::MAX_LEN);
@@ -795,29 +798,27 @@ impl<'a, T> IntoIterator for &'a List<T> {
 
 mod tests {
     #[test]
-    fn test_insert_and_remove() {
+    fn test_list() {
         use super::*;
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
 
-        for i in 0..9 {
+        for i in 0..128 {
             let mut list = List::new();
             let mut vector = Vec::new();
 
-            let max = Ord::min(i, List::<String>::MAX_LEN);
-            for i in 0..max {
-                list.insert(i, i.to_string());
-                vector.insert(i, i.to_string());
-            }
+            list.push_front("0".to_string());
+            vector.insert(0, "0".to_string());
 
-            for _ in 0..i {
+            let max = Ord::min(i, List::<String>::MAX_LEN);
+            for _ in 0..max {
                 let r = rng.gen_range(0..list.len());
                 list.insert(r, r.to_string());
                 vector.insert(r, r.to_string());
             }
 
-            for _ in 0..(i >> 1) {
+            for _ in 0..(max >> 1) {
                 let i = rng.gen_range(0..list.len());
                 list.remove(i);
                 vector.remove(i);
