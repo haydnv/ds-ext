@@ -361,18 +361,8 @@ fn remove_inner(nodes: &mut Nodes, node: usize) -> Option<usize> {
 }
 
 #[inline]
-fn max(nodes: &Nodes, ordinal: &usize) -> usize {
-    let mut node = nodes.get(&ordinal).expect("node");
-    if let Some(right) = node.right.as_ref() {
-        max(nodes, right)
-    } else {
-        *ordinal
-    }
-}
-
-#[inline]
 fn min(nodes: &Nodes, ordinal: &usize) -> usize {
-    let mut node = nodes.get(&ordinal).expect("node");
+    let node = nodes.get(&ordinal).expect("node");
     if let Some(left) = node.left.as_ref() {
         min(nodes, left)
     } else {
@@ -381,10 +371,10 @@ fn min(nodes: &Nodes, ordinal: &usize) -> usize {
 }
 
 mod tests {
-    use super::*;
-
     #[test]
     fn test_search() {
+        use super::*;
+
         let mut tree = Tree::new();
 
         tree.insert(0);
