@@ -6,9 +6,9 @@ use std::fmt;
 use std::hash::Hash;
 use std::sync::Arc;
 
-use super::set::LinkedHashSet;
+use super::set::OrdHashSet;
 
-/// An iterator over the contents of a [`LinkedHashMap`]
+/// An iterator over the contents of a [`OrdHashMap`]
 pub struct IntoIter<K, V> {
     inner: Inner<Arc<K>, V>,
     order: super::set::IntoIter<Arc<K>>,
@@ -43,7 +43,7 @@ impl<K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for IntoIter<K, V> {
     }
 }
 
-/// An iterator over the entries in a [`LinkedHashMap`]
+/// An iterator over the entries in a [`OrdHashMap`]
 pub struct Iter<'a, K, V> {
     inner: &'a Inner<Arc<K>, V>,
     order: super::set::Iter<'a, Arc<K>>,
@@ -71,7 +71,7 @@ impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Iter<'a, K, V> {
     }
 }
 
-/// An iterator over the keys in a [`LinkedHashMap`]
+/// An iterator over the keys in a [`OrdHashMap`]
 pub struct Keys<'a, K, V> {
     inner: &'a HashMap<Arc<K>, V>,
     order: super::set::Iter<'a, Arc<K>>,
@@ -99,7 +99,7 @@ impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Keys<'a, K, V> {
     }
 }
 
-/// An iterator over the values in a [`LinkedHashMap`]
+/// An iterator over the values in a [`OrdHashMap`]
 pub struct Values<'a, K, V> {
     inner: &'a Inner<Arc<K>, V>,
     order: super::set::Iter<'a, Arc<K>>,
@@ -125,16 +125,16 @@ impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Values<'a, K, V> {
     }
 }
 
-/// A [`std::collections::HashMap`] ordered by key using a [`LinkedHashSet`]
-pub struct LinkedHashMap<K, V> {
+/// A [`HashMap`] ordered by key using a [`OrdHashSet`]
+pub struct OrdHashMap<K, V> {
     inner: Inner<Arc<K>, V>,
-    order: LinkedHashSet<Arc<K>>,
+    order: OrdHashSet<Arc<K>>,
 }
 
-impl<K: Clone + Eq + Hash + Ord + fmt::Debug, V: Clone> Clone for LinkedHashMap<K, V> {
+impl<K: Clone + Eq + Hash + Ord + fmt::Debug, V: Clone> Clone for OrdHashMap<K, V> {
     fn clone(&self) -> Self {
         let mut inner = Inner::with_capacity(self.inner.capacity());
-        let mut order = LinkedHashSet::<Arc<K>>::with_capacity(inner.capacity());
+        let mut order = OrdHashSet::<Arc<K>>::with_capacity(inner.capacity());
 
         for key in &self.order {
             let key = Arc::new(K::clone(&**key));
@@ -147,30 +147,30 @@ impl<K: Clone + Eq + Hash + Ord + fmt::Debug, V: Clone> Clone for LinkedHashMap<
     }
 }
 
-impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
-    /// Construct a new [`LinkedHashMap`].
+impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
+    /// Construct a new [`OrdHashMap`].
     pub fn new() -> Self {
         Self {
             inner: Inner::new(),
-            order: LinkedHashSet::new(),
+            order: OrdHashSet::new(),
         }
     }
 
-    /// Construct a new [`LinkedHashMap`] with the given `capacity`.
+    /// Construct a new [`OrdHashMap`] with the given `capacity`.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             inner: Inner::with_capacity(capacity),
-            order: LinkedHashSet::with_capacity(capacity),
+            order: OrdHashSet::with_capacity(capacity),
         }
     }
 
-    /// Remove all entries from this [`LinkedHashMap`].
+    /// Remove all entries from this [`OrdHashMap`].
     pub fn clear(&mut self) {
         self.inner.clear();
         self.order.clear();
     }
 
-    /// Return `true` if there is an entry for the given `key` in this [`LinkedHashMap`].
+    /// Return `true` if there is an entry for the given `key` in this [`OrdHashMap`].
     pub fn contains_key<Q>(&self, key: &Q) -> bool
     where
         Arc<K>: Borrow<Q>,
@@ -179,7 +179,7 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
         self.inner.contains_key(key)
     }
 
-    /// Consume the `iter` and insert all its elements into this [`LinkedHashMap`].
+    /// Consume the `iter` and insert all its elements into this [`OrdHashMap`].
     pub fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
         for (key, value) in iter {
             self.insert(key, value);
@@ -222,7 +222,7 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
         self.inner.insert(key, value)
     }
 
-    /// Construct an iterator over the entries in this [`LinkedHashMap`].
+    /// Construct an iterator over the entries in this [`OrdHashMap`].
     pub fn iter(&self) -> Iter<K, V> {
         Iter {
             inner: &self.inner,
@@ -230,12 +230,12 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
         }
     }
 
-    /// Return `true` if this [`LinkedHashMap`] is empty.
+    /// Return `true` if this [`OrdHashMap`] is empty.
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
 
-    /// Construct an iterator over keys of this [`LinkedHashMap`].
+    /// Construct an iterator over keys of this [`OrdHashMap`].
     pub fn keys(&self) -> Keys<K, V> {
         Keys {
             inner: &self.inner,
@@ -243,18 +243,18 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
         }
     }
 
-    /// Return the size of this [`LinkedHashMap`].
+    /// Return the size of this [`OrdHashMap`].
     pub fn len(&self) -> usize {
         self.inner.len()
     }
 
-    /// Remove and return the first value in this [`LinkedHashMap`].
+    /// Remove and return the first value in this [`OrdHashMap`].
     pub fn pop_first(&mut self) -> Option<V> {
         let key = self.order.pop_first()?;
         self.inner.remove(&**key)
     }
 
-    /// Remove and return the first entry in this [`LinkedHashMap`].
+    /// Remove and return the first entry in this [`OrdHashMap`].
     pub fn pop_first_entry(&mut self) -> Option<(K, V)> {
         let key = self.order.pop_first()?;
         let (key, value) = self.inner.remove_entry(&**key).expect("entry");
@@ -262,13 +262,13 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
         Some((key, value))
     }
 
-    /// Remove and return the last value in this [`LinkedHashMap`].
+    /// Remove and return the last value in this [`OrdHashMap`].
     pub fn pop_last(&mut self) -> Option<V> {
         let key = self.order.pop_last()?;
         self.inner.remove(&**key)
     }
 
-    /// Remove and return the last entry in this [`LinkedHashMap`].
+    /// Remove and return the last entry in this [`OrdHashMap`].
     pub fn pop_last_entry(&mut self) -> Option<(K, V)> {
         let key = self.order.pop_last()?;
         let (key, value) = self.inner.remove_entry(&**key).expect("entry");
@@ -276,7 +276,7 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
         Some((key, value))
     }
 
-    /// Remove an entry from this [`LinkedHashMap`] and return its value, if present.
+    /// Remove an entry from this [`OrdHashMap`] and return its value, if present.
     pub fn remove<Q>(&mut self, key: &Q) -> Option<V>
     where
         Arc<K>: Borrow<Q>,
@@ -287,7 +287,7 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
         Some(value)
     }
 
-    /// Remove and return an entry from this [`LinkedHashMap`], if present.
+    /// Remove and return an entry from this [`OrdHashMap`], if present.
     pub fn remove_entry<Q>(&mut self, key: &Q) -> Option<(K, V)>
     where
         Arc<K>: Borrow<Q>,
@@ -299,7 +299,7 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
         Some((key, value))
     }
 
-    /// Construct an iterator over the values in this [`LinkedHashMap`].
+    /// Construct an iterator over the values in this [`OrdHashMap`].
     pub fn values(&self) -> Values<K, V> {
         Values {
             inner: &self.inner,
@@ -308,7 +308,7 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
     }
 }
 
-impl<K: Eq + Hash + Ord + fmt::Debug, V> FromIterator<(K, V)> for LinkedHashMap<K, V> {
+impl<K: Eq + Hash + Ord + fmt::Debug, V> FromIterator<(K, V)> for OrdHashMap<K, V> {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
         let iter = iter.into_iter();
         let mut map = match iter.size_hint() {
@@ -322,7 +322,7 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> FromIterator<(K, V)> for LinkedHashMap<
     }
 }
 
-impl<K: Eq + Hash + fmt::Debug, V> IntoIterator for LinkedHashMap<K, V> {
+impl<K: Eq + Hash + fmt::Debug, V> IntoIterator for OrdHashMap<K, V> {
     type Item = (K, V);
     type IntoIter = IntoIter<K, V>;
 
@@ -334,7 +334,7 @@ impl<K: Eq + Hash + fmt::Debug, V> IntoIterator for LinkedHashMap<K, V> {
     }
 }
 
-impl<K: Eq + Hash + Ord + fmt::Debug, V: fmt::Debug> fmt::Debug for LinkedHashMap<K, V> {
+impl<K: Eq + Hash + Ord + fmt::Debug, V: fmt::Debug> fmt::Debug for OrdHashMap<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str("{")?;
 

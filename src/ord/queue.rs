@@ -1,7 +1,8 @@
 //! A linked hash map ordered by insertion which can be reordered by swapping,
 //! useful as a simple priority queue (e.g. an LFU or LRU cache).
 //!
-//! Note: [`Queue`] is indexed by keys. For indexing by cardinal order, use a [`List`] instead.
+//! Note: [`LinkedHashMap`] is indexed by keys.
+//! For indexing by cardinal order, use a [`super::List`] instead.
 
 use std::borrow::Borrow;
 use std::cell::{RefCell, RefMut};
@@ -30,9 +31,9 @@ impl<K, V> Item<K, V> {
 
 type Inner<K, V> = HashMap<Arc<K>, Item<K, V>>;
 
-/// An iterator over the contents of a [`Queue`]
+/// An iterator over the contents of a [`LinkedHashMap`]
 pub struct IntoIter<K, V> {
-    queue: Queue<K, V>,
+    queue: LinkedHashMap<K, V>,
 }
 
 impl<K: Eq + Hash + fmt::Debug, V> Iterator for IntoIter<K, V> {
@@ -53,7 +54,7 @@ impl<K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for IntoIter<K, V> {
     }
 }
 
-/// An iterator over the entries in a [`Queue`]
+/// An iterator over the entries in a [`LinkedHashMap`]
 pub struct Iter<'a, K, V> {
     list: &'a Inner<K, V>,
     next: Option<Arc<K>>,
@@ -103,7 +104,7 @@ impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Iter<'a, K, V> {
     }
 }
 
-/// An iterator over the keys in a [`Queue`]
+/// An iterator over the keys in a [`LinkedHashMap`]
 pub struct Keys<'a, K, V> {
     inner: Iter<'a, K, V>,
 }
@@ -126,7 +127,7 @@ impl<'a, K: Hash + Eq, V> DoubleEndedIterator for Keys<'a, K, V> {
     }
 }
 
-/// An iterator over the values in a [`Queue`]
+/// An iterator over the values in a [`LinkedHashMap`]
 pub struct Values<'a, K, V> {
     inner: Iter<'a, K, V>,
 }
@@ -149,14 +150,14 @@ impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Values<'a, K, V> {
     }
 }
 
-/// A hash map in insertion order which can be reordered using [`Queue::swap`].
-pub struct Queue<K, V> {
+/// A hash map in insertion order which can be reordered using [`Self::bump`] and [`Self::swap`].
+pub struct LinkedHashMap<K, V> {
     list: Inner<K, V>,
     head: Option<Arc<K>>,
     tail: Option<Arc<K>>,
 }
 
-impl<K: Clone + Eq + Hash, V: Clone> Clone for Queue<K, V> {
+impl<K: Clone + Eq + Hash, V: Clone> Clone for LinkedHashMap<K, V> {
     fn clone(&self) -> Self {
         let mut other = Self::with_capacity(self.list.capacity());
 
@@ -170,8 +171,8 @@ impl<K: Clone + Eq + Hash, V: Clone> Clone for Queue<K, V> {
     }
 }
 
-impl<K: Eq + Hash, V> Queue<K, V> {
-    /// Construct a new [`Queue`].
+impl<K: Eq + Hash, V> LinkedHashMap<K, V> {
+    /// Construct a new [`LinkedHashMap`].
     pub fn new() -> Self {
         Self {
             list: HashMap::new(),
@@ -180,7 +181,7 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         }
     }
 
-    /// Construct a new [`Queue`] with the given `capacity`.
+    /// Construct a new [`LinkedHashMap`] with the given `capacity`.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             list: HashMap::with_capacity(capacity),
@@ -250,14 +251,14 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         true
     }
 
-    /// Remove all entries from this [`Queue`].
+    /// Remove all entries from this [`LinkedHashMap`].
     pub fn clear(&mut self) {
         self.list.clear();
         self.head = None;
         self.tail = None;
     }
 
-    /// Return `true` if there is an entry for the given `key` in this [`Queue`].
+    /// Return `true` if there is an entry for the given `key` in this [`LinkedHashMap`].
     pub fn contains_key<Q>(&self, key: &Q) -> bool
     where
         Arc<K>: Borrow<Q>,
@@ -266,7 +267,7 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         self.list.contains_key(key)
     }
 
-    /// Consume the `iter` and insert all its elements into this [`Queue`].
+    /// Consume the `iter` and insert all its elements into this [`LinkedHashMap`].
     pub fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
         for (key, value) in iter {
             self.insert(key, value);
@@ -331,7 +332,7 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         old_value
     }
 
-    /// Construct an iterator over the entries in this [`Queue`].
+    /// Construct an iterator over the entries in this [`LinkedHashMap`].
     pub fn iter(&self) -> Iter<K, V> {
         Iter {
             list: &self.list,
@@ -341,22 +342,22 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         }
     }
 
-    /// Return `true` if this [`Queue`] is empty.
+    /// Return `true` if this [`LinkedHashMap`] is empty.
     pub fn is_empty(&self) -> bool {
         self.list.is_empty()
     }
 
-    /// Construct an iterator over keys of this [`Queue`].
+    /// Construct an iterator over keys of this [`LinkedHashMap`].
     pub fn keys(&self) -> Keys<K, V> {
         Keys { inner: self.iter() }
     }
 
-    /// Return the size of this [`Queue`].
+    /// Return the size of this [`LinkedHashMap`].
     pub fn len(&self) -> usize {
         self.list.len()
     }
 
-    /// Remove and return the first value in this [`Queue`].
+    /// Remove and return the first value in this [`LinkedHashMap`].
     pub fn pop_first(&mut self) -> Option<V> {
         if self.head.is_none() {
             return None;
@@ -370,7 +371,7 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         Some(self.remove_inner(item))
     }
 
-    /// Remove and return the first entry in this [`Queue`].
+    /// Remove and return the first entry in this [`LinkedHashMap`].
     pub fn pop_first_entry(&mut self) -> Option<(K, V)>
     where
         K: fmt::Debug,
@@ -389,7 +390,7 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         Some((key, value))
     }
 
-    /// Remove and return the last value in this [`Queue`].
+    /// Remove and return the last value in this [`LinkedHashMap`].
     pub fn pop_last(&mut self) -> Option<V> {
         if self.tail.is_none() {
             return None;
@@ -403,7 +404,7 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         Some(self.remove_inner(item))
     }
 
-    /// Remove and return the last entry in this [`Queue`].
+    /// Remove and return the last entry in this [`LinkedHashMap`].
     pub fn pop_last_entry(&mut self) -> Option<(K, V)>
     where
         K: fmt::Debug,
@@ -461,7 +462,7 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         item.value
     }
 
-    /// Remove an entry from this [`Queue`] and return its value, if present.
+    /// Remove an entry from this [`LinkedHashMap`] and return its value, if present.
     pub fn remove<Q>(&mut self, key: &Q) -> Option<V>
     where
         Arc<K>: Borrow<Q>,
@@ -471,7 +472,7 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         Some(self.remove_inner(item))
     }
 
-    /// Remove and return an entry from this [`Queue`], if present.
+    /// Remove and return an entry from this [`LinkedHashMap`], if present.
     pub fn remove_entry<Q>(&mut self, key: &Q) -> Option<(K, V)>
     where
         K: fmt::Debug,
@@ -483,8 +484,8 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         Some((key, self.remove_inner(item)))
     }
 
-    /// Swap the position of two keys in this [`Queue`].
-    /// Returns `true` if both keys are present in the [`Queue`].
+    /// Swap the position of two keys in this [`LinkedHashMap`].
+    /// Returns `true` if both keys are present in the [`LinkedHashMap`].
     pub fn swap<Q>(&mut self, l: &Q, r: &Q) -> bool
     where
         Arc<K>: Borrow<Q>,
@@ -525,13 +526,13 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         true
     }
 
-    /// Construct an iterator over the values in this [`Queue`].
+    /// Construct an iterator over the values in this [`LinkedHashMap`].
     pub fn values(&self) -> Values<K, V> {
         Values { inner: self.iter() }
     }
 }
 
-impl<K: Eq + Hash, V> FromIterator<(K, V)> for Queue<K, V> {
+impl<K: Eq + Hash, V> FromIterator<(K, V)> for LinkedHashMap<K, V> {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
         let iter = iter.into_iter();
         let mut map = match iter.size_hint() {
@@ -545,7 +546,7 @@ impl<K: Eq + Hash, V> FromIterator<(K, V)> for Queue<K, V> {
     }
 }
 
-impl<K: Eq + Hash + fmt::Debug, V> IntoIterator for Queue<K, V> {
+impl<K: Eq + Hash + fmt::Debug, V> IntoIterator for LinkedHashMap<K, V> {
     type Item = (K, V);
     type IntoIter = IntoIter<K, V>;
 
@@ -554,7 +555,7 @@ impl<K: Eq + Hash + fmt::Debug, V> IntoIterator for Queue<K, V> {
     }
 }
 
-impl<K: Eq + Hash + fmt::Debug, V: fmt::Debug> fmt::Debug for Queue<K, V> {
+impl<K: Eq + Hash + fmt::Debug, V: fmt::Debug> fmt::Debug for LinkedHashMap<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str("{")?;
 
@@ -575,7 +576,7 @@ mod tests {
     use super::*;
 
     #[allow(dead_code)]
-    fn print_debug<K: fmt::Display + Eq + Hash, V>(queue: &Queue<K, V>) {
+    fn print_debug<K: fmt::Display + Eq + Hash, V>(queue: &LinkedHashMap<K, V>) {
         let mut next = queue.head.clone();
         while let Some(next_key) = next {
             let item = queue.list.get::<K>(&next_key).expect("item").state();
@@ -595,7 +596,7 @@ mod tests {
         println!();
     }
 
-    fn validate<K: fmt::Debug + Eq + Hash, V>(queue: &Queue<K, V>) {
+    fn validate<K: fmt::Debug + Eq + Hash, V>(queue: &LinkedHashMap<K, V>) {
         if queue.list.is_empty() {
             assert!(queue.head.is_none(), "head is {:?}", queue.head);
             assert!(queue.tail.is_none(), "tail is {:?}", queue.tail);
@@ -628,7 +629,7 @@ mod tests {
 
     #[test]
     fn test_order() {
-        let mut queue = Queue::new();
+        let mut queue = LinkedHashMap::new();
         let expected: Vec<i32> = (0..10).collect();
 
         for i in expected.iter() {
@@ -648,7 +649,7 @@ mod tests {
 
     #[test]
     fn test_access() {
-        let mut queue = Queue::new();
+        let mut queue = LinkedHashMap::new();
         validate(&queue);
 
         let mut rng = thread_rng();

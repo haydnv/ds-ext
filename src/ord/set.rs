@@ -4,9 +4,9 @@
 //! ```
 //! use std::sync::Arc;
 //!
-//! use ds_ext::ord::LinkedHashSet;
+//! use ds_ext::ord::OrdHashSet;
 //!
-//! let mut set1 = LinkedHashSet::new();
+//! let mut set1 = OrdHashSet::new();
 //! assert!(set1.insert("d"));
 //! assert!(set1.insert("a"));
 //! assert!(set1.insert("c"));
@@ -20,7 +20,7 @@
 //!
 //! assert_eq!(**set1.difference(&set2).next().expect("diff"), "d");
 //! assert_eq!(
-//!     set1.intersection(&set2).map(|s| **s).collect::<LinkedHashSet<&str>>(),
+//!     set1.intersection(&set2).map(|s| **s).collect::<OrdHashSet<&str>>(),
 //!     set2
 //! );
 //!
@@ -46,7 +46,7 @@ use std::sync::Arc;
 
 use super::list::List;
 
-/// An iterator over the contents of a [`LinkedHashSet`]
+/// An iterator over the contents of a [`OrdHashSet`]
 pub struct IntoIter<T> {
     inner: super::list::IntoIter<Arc<T>>,
 }
@@ -69,7 +69,7 @@ impl<T> DoubleEndedIterator for IntoIter<T> {
     }
 }
 
-/// An iterator over the values in a [`LinkedHashSet`]
+/// An iterator over the values in a [`OrdHashSet`]
 pub struct Iter<'a, T> {
     inner: super::list::Iter<'a, Arc<T>>,
 }
@@ -95,12 +95,12 @@ impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
 /// A [`std::collections::HashSet`] ordered by key using a [`List`].
 ///
 /// This implements `Deref` so that the standard comparison methods are still available.
-pub struct LinkedHashSet<T> {
+pub struct OrdHashSet<T> {
     inner: Inner<Arc<T>>,
     order: List<Arc<T>>,
 }
 
-impl<T> Clone for LinkedHashSet<T> {
+impl<T> Clone for OrdHashSet<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -109,15 +109,15 @@ impl<T> Clone for LinkedHashSet<T> {
     }
 }
 
-impl<T: PartialEq> PartialEq for LinkedHashSet<T> {
+impl<T: PartialEq> PartialEq for OrdHashSet<T> {
     fn eq(&self, other: &Self) -> bool {
         self.order == other.order
     }
 }
 
-impl<T: Eq> Eq for LinkedHashSet<T> {}
+impl<T: Eq> Eq for OrdHashSet<T> {}
 
-impl<T> Deref for LinkedHashSet<T> {
+impl<T> Deref for OrdHashSet<T> {
     type Target = Inner<Arc<T>>;
 
     fn deref(&self) -> &Self::Target {
@@ -125,8 +125,8 @@ impl<T> Deref for LinkedHashSet<T> {
     }
 }
 
-impl<T: Eq + Hash + Ord + fmt::Debug> LinkedHashSet<T> {
-    /// Construct a new [`LinkedHashSet`].
+impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
+    /// Construct a new [`OrdHashSet`].
     pub fn new() -> Self {
         Self {
             inner: Inner::new(),
@@ -134,7 +134,7 @@ impl<T: Eq + Hash + Ord + fmt::Debug> LinkedHashSet<T> {
         }
     }
 
-    /// Construct a new [`LinkedHashSet`] with the given `capacity`.
+    /// Construct a new [`OrdHashSet`] with the given `capacity`.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             inner: Inner::with_capacity(capacity),
@@ -142,20 +142,20 @@ impl<T: Eq + Hash + Ord + fmt::Debug> LinkedHashSet<T> {
         }
     }
 
-    /// Remove all values from this [`LinkedHashSet`]
+    /// Remove all values from this [`OrdHashSet`]
     pub fn clear(&mut self) {
         self.inner.clear();
         self.order.clear();
     }
 
-    /// Consume the given `iter` and insert all its values into this [`LinkedHashSet`]
+    /// Consume the given `iter` and insert all its values into this [`OrdHashSet`]
     pub fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for item in iter {
             self.insert(item);
         }
     }
 
-    /// Insert a `value` into this [`LinkedHashSet`] and return `false` if it was already present.
+    /// Insert a `value` into this [`OrdHashSet`] and return `false` if it was already present.
     pub fn insert(&mut self, value: T) -> bool {
         debug_assert!(self.is_valid());
 
@@ -184,14 +184,14 @@ impl<T: Eq + Hash + Ord + fmt::Debug> LinkedHashSet<T> {
         new
     }
 
-    /// Construct an iterator over the values in this [`LinkedHashSet`].
+    /// Construct an iterator over the values in this [`OrdHashSet`].
     pub fn iter(&self) -> Iter<T> {
         Iter {
             inner: self.order.iter(),
         }
     }
 
-    /// Remove and return the first value in this [`LinkedHashSet`].
+    /// Remove and return the first value in this [`OrdHashSet`].
     pub fn pop_first(&mut self) -> Option<Arc<T>> {
         debug_assert!(self.is_valid());
 
@@ -204,7 +204,7 @@ impl<T: Eq + Hash + Ord + fmt::Debug> LinkedHashSet<T> {
         }
     }
 
-    /// Remove and return the last value in this [`LinkedHashSet`].
+    /// Remove and return the last value in this [`OrdHashSet`].
     pub fn pop_last(&mut self) -> Option<Arc<T>> {
         if let Some(value) = self.order.pop_back() {
             self.inner.remove(&value);
@@ -214,7 +214,7 @@ impl<T: Eq + Hash + Ord + fmt::Debug> LinkedHashSet<T> {
         }
     }
 
-    /// Remove the given `value` from this [`LinkedHashSet`] and return `true` if it was present.
+    /// Remove the given `value` from this [`OrdHashSet`] and return `true` if it was present.
     ///
     /// The value may be any borrowed form of `T`,
     /// but the ordering on the borrowed form **must** match the ordering of `T`.
@@ -254,7 +254,7 @@ impl<T: Eq + Hash + Ord + fmt::Debug> LinkedHashSet<T> {
     }
 }
 
-impl<T: Eq + Hash + Ord + fmt::Debug> fmt::Debug for LinkedHashSet<T> {
+impl<T: Eq + Hash + Ord + fmt::Debug> fmt::Debug for OrdHashSet<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str("[ ")?;
 
@@ -266,7 +266,7 @@ impl<T: Eq + Hash + Ord + fmt::Debug> fmt::Debug for LinkedHashSet<T> {
     }
 }
 
-impl<T: Eq + Hash + Ord + fmt::Debug> FromIterator<T> for LinkedHashSet<T> {
+impl<T: Eq + Hash + Ord + fmt::Debug> FromIterator<T> for OrdHashSet<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let iter = iter.into_iter();
         let mut set = match iter.size_hint() {
@@ -280,7 +280,7 @@ impl<T: Eq + Hash + Ord + fmt::Debug> FromIterator<T> for LinkedHashSet<T> {
     }
 }
 
-impl<T> IntoIterator for LinkedHashSet<T> {
+impl<T> IntoIterator for OrdHashSet<T> {
     type Item = Arc<T>;
     type IntoIter = IntoIter<T>;
 
@@ -291,12 +291,12 @@ impl<T> IntoIterator for LinkedHashSet<T> {
     }
 }
 
-impl<'a, T: Hash + Ord + fmt::Debug> IntoIterator for &'a LinkedHashSet<T> {
+impl<'a, T: Hash + Ord + fmt::Debug> IntoIterator for &'a OrdHashSet<T> {
     type Item = Ref<'a, Arc<T>>;
     type IntoIter = Iter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        LinkedHashSet::iter(self)
+        OrdHashSet::iter(self)
     }
 }
 

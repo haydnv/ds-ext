@@ -9,6 +9,7 @@ pub mod set;
 mod tree;
 
 pub use list::List;
-pub use map::LinkedHashMap;
-pub use set::LinkedHashSet;
+pub use map::OrdHashMap;
+pub use queue::LinkedHashMap;
+pub use set::OrdHashSet;
 pub use tree::Tree;
