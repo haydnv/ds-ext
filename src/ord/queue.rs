@@ -142,7 +142,15 @@ pub struct Queue<K, V> {
 
 impl<K: Clone + Eq + Hash, V: Clone> Clone for Queue<K, V> {
     fn clone(&self) -> Self {
-        todo!()
+        let mut other = Self::with_capacity(self.list.capacity());
+
+        for (key, item) in &self.list {
+            let key = K::clone(&**key);
+            let value = V::clone(&item.value);
+            other.insert(key, value);
+        }
+
+        other
     }
 }
 
@@ -244,7 +252,9 @@ impl<K: Eq + Hash, V> Queue<K, V> {
 
     /// Consume the `iter` and insert all its elements into this [`Queue`].
     pub fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
-        todo!()
+        for (key, value) in iter {
+            self.insert(key, value);
+        }
     }
 
     /// Borrow the value at the given `key`, if present.
@@ -336,7 +346,16 @@ impl<K: Eq + Hash, V> Queue<K, V> {
 
     /// Remove and return the first value in this [`Queue`].
     pub fn pop_first(&mut self) -> Option<V> {
-        todo!()
+        if self.head.is_none() {
+            return None;
+        }
+
+        let item = self
+            .list
+            .remove(self.head.as_ref().expect("head"))
+            .expect("head");
+
+        Some(self.remove_inner(item))
     }
 
     /// Remove and return the first entry in this [`Queue`].
@@ -344,12 +363,32 @@ impl<K: Eq + Hash, V> Queue<K, V> {
     where
         K: fmt::Debug,
     {
-        todo!()
+        if self.head.is_none() {
+            return None;
+        }
+
+        let (key, item) = self
+            .list
+            .remove_entry(self.head.as_ref().expect("head"))
+            .expect("head");
+
+        let value = self.remove_inner(item);
+        let key = Arc::try_unwrap(key).expect("key");
+        Some((key, value))
     }
 
     /// Remove and return the last value in this [`Queue`].
     pub fn pop_last(&mut self) -> Option<V> {
-        todo!()
+        if self.tail.is_none() {
+            return None;
+        }
+
+        let item = self
+            .list
+            .remove(self.tail.as_ref().expect("tail"))
+            .expect("tail");
+
+        Some(self.remove_inner(item))
     }
 
     /// Remove and return the last entry in this [`Queue`].
@@ -357,7 +396,18 @@ impl<K: Eq + Hash, V> Queue<K, V> {
     where
         K: fmt::Debug,
     {
-        todo!()
+        if self.tail.is_none() {
+            return None;
+        }
+
+        let (key, item) = self
+            .list
+            .remove_entry(self.tail.as_ref().expect("tail"))
+            .expect("tail");
+
+        let value = self.remove_inner(item);
+        let key = Arc::try_unwrap(key).expect("key");
+        Some((key, value))
     }
 
     /// Remove an entry from this [`Queue`] and return its value, if present.
