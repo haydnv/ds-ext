@@ -187,7 +187,7 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
     }
 
     /// Borrow the value at the given `key`, if present.
-    pub fn get<Q>(&mut self, key: &Q) -> Option<&V>
+    pub fn get<Q>(&self, key: &Q) -> Option<&V>
     where
         Arc<K>: Borrow<Q>,
         Q: Eq + Hash + ?Sized,
@@ -196,7 +196,7 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
     }
 
     /// Borrow the entry at the given `key`, if present.
-    pub fn get_key_value<Q>(&mut self, key: &Q) -> Option<(&K, &V)>
+    pub fn get_key_value<Q>(&self, key: &Q) -> Option<(&K, &V)>
     where
         Arc<K>: Borrow<Q>,
         Q: Eq + Hash + ?Sized,
