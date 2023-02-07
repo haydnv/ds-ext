@@ -32,35 +32,32 @@ type Inner<K, V> = HashMap<Arc<K>, Item<K, V>>;
 
 /// An iterator over the contents of a [`Queue`]
 pub struct IntoIter<K, V> {
-    list: Inner<K, V>,
-    next: Option<Arc<K>>,
-    last: Option<Arc<K>>,
-    size: usize,
+    queue: Queue<K, V>,
 }
 
 impl<K: Eq + Hash + fmt::Debug, V> Iterator for IntoIter<K, V> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        self.queue.pop_first_entry()
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.size, Some(self.size))
+        (self.queue.len(), Some(self.queue.len()))
     }
 }
 
 impl<K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for IntoIter<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        todo!()
+        self.queue.pop_last_entry()
     }
 }
 
 /// An iterator over the entries in a [`Queue`]
 pub struct Iter<'a, K, V> {
     list: &'a Inner<K, V>,
-    next: Option<&'a Arc<K>>,
-    last: Option<&'a Arc<K>>,
+    next: Option<Arc<K>>,
+    last: Option<Arc<K>>,
     size: usize,
 }
 
@@ -68,7 +65,19 @@ impl<'a, K: Eq + Hash, V> Iterator for Iter<'a, K, V> {
     type Item = (&'a K, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        let next = self.next.take()?;
+        let (key, item) = self.list.get_key_value(&*next).expect("next");
+
+        if self.last == Some(next) {
+            self.next = None;
+            self.last = None;
+        } else {
+            self.next = item.state().next.clone();
+        }
+
+        self.size -= 1;
+
+        Some((key, &item.value))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -78,58 +87,65 @@ impl<'a, K: Eq + Hash, V> Iterator for Iter<'a, K, V> {
 
 impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Iter<'a, K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        todo!()
+        let last = self.last.take()?;
+        let (key, item) = self.list.get_key_value(&*last).expect("next");
+
+        if self.next == Some(last) {
+            self.next = None;
+            self.last = None;
+        } else {
+            self.last = item.state().prev.clone();
+        }
+
+        self.size -= 1;
+
+        Some((key, &item.value))
     }
 }
 
 /// An iterator over the keys in a [`Queue`]
-pub struct Keys<'a, K> {
-    next: Option<&'a Arc<K>>,
-    last: Option<&'a Arc<K>>,
-    size: usize,
+pub struct Keys<'a, K, V> {
+    inner: Iter<'a, K, V>,
 }
 
-impl<'a, K: Eq> Iterator for Keys<'a, K> {
+impl<'a, K: Hash + Eq, V> Iterator for Keys<'a, K, V> {
     type Item = &'a K;
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        self.inner.next().map(|(key, _value)| key)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.size, Some(self.size))
+        self.inner.size_hint()
     }
 }
 
-impl<'a, K: Eq> DoubleEndedIterator for Keys<'a, K> {
+impl<'a, K: Hash + Eq, V> DoubleEndedIterator for Keys<'a, K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        todo!()
+        self.inner.next_back().map(|(key, _value)| key)
     }
 }
 
 /// An iterator over the values in a [`Queue`]
 pub struct Values<'a, K, V> {
-    list: &'a Inner<K, V>,
-    next: Option<&'a Arc<K>>,
-    last: Option<&'a Arc<K>>,
-    size: usize,
+    inner: Iter<'a, K, V>,
 }
 
 impl<'a, K: Eq + Hash, V> Iterator for Values<'a, K, V> {
     type Item = &'a V;
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        self.inner.next().map(|(_key, value)| value)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.size, Some(self.size))
+        self.inner.size_hint()
     }
 }
 
 impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Values<'a, K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        todo!()
+        self.inner.next_back().map(|(_key, value)| value)
     }
 }
 
@@ -319,8 +335,8 @@ impl<K: Eq + Hash, V> Queue<K, V> {
     pub fn iter(&self) -> Iter<K, V> {
         Iter {
             list: &self.list,
-            next: self.head.as_ref(),
-            last: self.tail.as_ref(),
+            next: self.head.clone(),
+            last: self.tail.clone(),
             size: self.len(),
         }
     }
@@ -331,12 +347,8 @@ impl<K: Eq + Hash, V> Queue<K, V> {
     }
 
     /// Construct an iterator over keys of this [`Queue`].
-    pub fn keys(&self) -> Keys<K> {
-        Keys {
-            next: self.head.as_ref(),
-            last: self.tail.as_ref(),
-            size: self.len(),
-        }
+    pub fn keys(&self) -> Keys<K, V> {
+        Keys { inner: self.iter() }
     }
 
     /// Return the size of this [`Queue`].
@@ -473,12 +485,7 @@ impl<K: Eq + Hash, V> Queue<K, V> {
 
     /// Construct an iterator over the values in this [`Queue`].
     pub fn values(&self) -> Values<K, V> {
-        Values {
-            list: &self.list,
-            next: self.head.as_ref(),
-            last: self.head.as_ref(),
-            size: self.len(),
-        }
+        Values { inner: self.iter() }
     }
 }
 
@@ -501,14 +508,7 @@ impl<K: Eq + Hash + fmt::Debug, V> IntoIterator for Queue<K, V> {
     type IntoIter = IntoIter<K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let size = self.len();
-
-        IntoIter {
-            list: self.list,
-            next: self.head,
-            last: self.tail,
-            size,
-        }
+        IntoIter { queue: self }
     }
 }
 
@@ -589,7 +589,7 @@ mod tests {
         let mut queue = Queue::new();
         let expected: Vec<i32> = (0..10).collect();
 
-        for i in expected.iter().rev() {
+        for i in expected.iter() {
             queue.insert(*i, i.to_string());
             validate(&queue);
         }
