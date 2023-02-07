@@ -243,6 +243,11 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
         }
     }
 
+    /// Return the size of this [`LinkedHashMap`].
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
     /// Remove and return the first value in this [`LinkedHashMap`].
     pub fn pop_first(&mut self) -> Option<V> {
         let key = self.order.pop_first()?;

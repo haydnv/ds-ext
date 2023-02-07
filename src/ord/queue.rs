@@ -1,150 +1,148 @@
 //! A hash map ordered by insertion which can be reordered with a `swap` function,
 //! suitable for use as a cache or priority queue (e.g. an LFU or LRU cache).
 //!
-//! Note: [`Queue`] is indexed by keys and uses a [`List`] for ordering internally.
-//! For use cases which require cardinal indexing, use a [`List`] instead.
+//! Note: [`Queue`] is indexed by keys. For indexing by cardinal order, use a [`List`] instead.
 
 use std::borrow::Borrow;
+use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
-use std::fmt;
 use std::hash::Hash;
 use std::sync::Arc;
+use std::{fmt, mem};
 
-use super::List;
+struct ItemState<K> {
+    prev: Option<Arc<K>>,
+    next: Option<Arc<K>>,
+}
+
+struct Item<K, V> {
+    key: Arc<K>,
+    value: V,
+    state: RefCell<ItemState<K>>,
+}
+
+impl<K, V> Item<K, V> {
+    #[inline]
+    fn state(&self) -> RefMut<ItemState<K>> {
+        self.state.borrow_mut()
+    }
+}
+
+type Inner<K, V> = HashMap<Arc<K>, Item<K, V>>;
 
 /// An iterator over the contents of a [`Queue`]
 pub struct IntoIter<K, V> {
-    inner: HashMap<Arc<K>, V>,
-    order: super::list::IntoIter<Arc<K>>,
-}
-
-impl<K: Eq + Hash + fmt::Debug, V> IntoIter<K, V> {
-    fn next_entry(&mut self, key: Arc<K>) -> Option<(K, V)> {
-        let value = self.inner.remove(&*key).expect("value");
-        let key = Arc::try_unwrap(key).expect("key");
-        Some((key, value))
-    }
+    list: Inner<K, V>,
+    next: Option<Arc<K>>,
+    last: Option<Arc<K>>,
+    size: usize,
 }
 
 impl<K: Eq + Hash + fmt::Debug, V> Iterator for IntoIter<K, V> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let key = self.order.next()?;
-        self.next_entry(key)
+        todo!()
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.order.size_hint()
+        (self.size, Some(self.size))
     }
 }
 
 impl<K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for IntoIter<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let key = self.order.next_back()?;
-        self.next_entry(key)
+        todo!()
     }
 }
 
 /// An iterator over the entries in a [`Queue`]
 pub struct Iter<'a, K, V> {
-    inner: &'a HashMap<Arc<K>, V>,
-    order: super::list::Iter<'a, Arc<K>>,
+    list: &'a Inner<K, V>,
+    next: Option<&'a Arc<K>>,
+    last: Option<&'a Arc<K>>,
+    size: usize,
 }
 
 impl<'a, K: Eq + Hash, V> Iterator for Iter<'a, K, V> {
     type Item = (&'a K, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let key = &**self.order.next()?;
-        let (key, value) = self.inner.get_key_value(key).expect("entry");
-        Some((&**key, value))
+        todo!()
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.order.size_hint()
+        (self.size, Some(self.size))
     }
 }
 
 impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Iter<'a, K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let key = self.order.next_back()?;
-        let (key, value) = self.inner.get_key_value(&**key).expect("entry");
-        Some((&**key, value))
+        todo!()
     }
 }
 
 /// An iterator over the keys in a [`Queue`]
-pub struct Keys<'a, K, V> {
-    inner: &'a HashMap<Arc<K>, V>,
-    order: super::list::Iter<'a, Arc<K>>,
+pub struct Keys<'a, K> {
+    next: Option<&'a Arc<K>>,
+    last: Option<&'a Arc<K>>,
+    size: usize,
 }
 
-impl<'a, K: Eq + Hash, V> Iterator for Keys<'a, K, V> {
+impl<'a, K: Eq> Iterator for Keys<'a, K> {
     type Item = &'a K;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let key = self.order.next()?;
-        let (key, _) = self.inner.get_key_value(&**key).expect("entry");
-        Some(&**key)
+        todo!()
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.order.size_hint()
+        (self.size, Some(self.size))
     }
 }
 
-impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Keys<'a, K, V> {
+impl<'a, K: Eq> DoubleEndedIterator for Keys<'a, K> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let key = self.order.next_back()?;
-        let (key, _) = self.inner.get_key_value(&**key).expect("entry");
-        Some(&**key)
+        todo!()
     }
 }
 
 /// An iterator over the values in a [`Queue`]
 pub struct Values<'a, K, V> {
-    inner: &'a HashMap<Arc<K>, V>,
-    order: super::list::Iter<'a, Arc<K>>,
+    list: &'a Inner<K, V>,
+    next: Option<&'a Arc<K>>,
+    last: Option<&'a Arc<K>>,
+    size: usize,
 }
 
 impl<'a, K: Eq + Hash, V> Iterator for Values<'a, K, V> {
     type Item = &'a V;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let key = self.order.next()?;
-        self.inner.get(&**key)
+        todo!()
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.order.size_hint()
+        (self.size, Some(self.size))
     }
 }
 
 impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Values<'a, K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let key = self.order.next_back()?;
-        self.inner.get(&**key)
+        todo!()
     }
 }
 
 /// A hash map in insertion order which can be reordered using [`Queue::swap`].
 pub struct Queue<K, V> {
-    inner: HashMap<Arc<K>, V>,
-    order: List<Arc<K>>,
+    list: Inner<K, V>,
+    head: Option<Arc<K>>,
+    tail: Option<Arc<K>>,
 }
 
 impl<K: Clone + Eq + Hash, V: Clone> Clone for Queue<K, V> {
     fn clone(&self) -> Self {
-        let order: List<Arc<K>> = self.keys().cloned().map(Arc::new).collect();
-        let mut inner = HashMap::with_capacity(self.inner.capacity());
-
-        for key in &order {
-            let value = self.get::<K>(&**key).expect("value");
-            inner.insert(key.clone(), V::clone(value));
-        }
-
-        Self { inner, order }
+        todo!()
     }
 }
 
@@ -152,23 +150,87 @@ impl<K: Eq + Hash, V> Queue<K, V> {
     /// Construct a new [`Queue`].
     pub fn new() -> Self {
         Self {
-            inner: HashMap::new(),
-            order: List::new(),
+            list: HashMap::new(),
+            head: None,
+            tail: None,
         }
     }
 
     /// Construct a new [`Queue`] with the given `capacity`.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            inner: HashMap::with_capacity(capacity),
-            order: List::with_capacity(capacity),
+            list: HashMap::with_capacity(capacity),
+            head: None,
+            tail: None,
         }
+    }
+
+    /// Increase the given `key`'s priority and return `true` if present, otherwise `false`.
+    pub fn bump(&mut self, key: &K) -> bool {
+        let item = if let Some(item) = self.list.get(key) {
+            item
+        } else {
+            return false;
+        };
+
+        let mut item_state = item.state();
+
+        let last = if item_state.prev.is_none() {
+            // can't bump the first item
+            return true;
+        } else if item_state.next.is_none() && item_state.prev.is_some() {
+            // bump the last item
+
+            let prev_key = item_state.prev.as_ref().expect("prev");
+            let mut prev = self.list.get::<K>(prev_key).expect("prev").state();
+
+            mem::swap(&mut prev.next, &mut item_state.next); // set prev.next
+            mem::swap(&mut item_state.prev, &mut prev.prev); // set item.prev
+            mem::swap(&mut item_state.next, &mut prev.prev); // set item.next & prev.prev
+
+            item_state.next.clone()
+        } else {
+            // bump an item in the middle
+
+            let next_key = item_state.next.as_ref().expect("next");
+            let mut next = self.list.get::<K>(next_key).expect("next").state();
+
+            let prev_key = item_state.prev.as_ref().expect("prev").clone();
+            let mut prev = self.list.get::<K>(&prev_key).expect("prev").state();
+
+            mem::swap(&mut next.prev, &mut item_state.prev); // set next.prev
+            mem::swap(&mut item_state.prev, &mut prev.prev); // set item.prev
+            mem::swap(&mut prev.next, &mut item_state.next); // set prev.next
+
+            item_state.prev = Some(prev_key); // set item.prev
+
+            None
+        };
+
+        let first = if let Some(prev_key) = &item_state.prev {
+            let mut skip = self.list.get::<K>(prev_key).expect("skip").state();
+            skip.next = Some(item.key.clone());
+            None
+        } else {
+            Some(item.key.clone())
+        };
+
+        if let Some(first) = first {
+            self.head = Some(first);
+        }
+
+        if let Some(last) = last {
+            self.tail = Some(last);
+        }
+
+        true
     }
 
     /// Remove all entries from this [`Queue`].
     pub fn clear(&mut self) {
-        self.inner.clear();
-        self.order.clear();
+        self.list.clear();
+        self.head = None;
+        self.tail = None;
     }
 
     /// Return `true` if there is an entry for the given `key` in this [`Queue`].
@@ -177,14 +239,12 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         Arc<K>: Borrow<Q>,
         Q: Eq + Hash + ?Sized,
     {
-        self.inner.contains_key(key)
+        self.list.contains_key(key)
     }
 
     /// Consume the `iter` and insert all its elements into this [`Queue`].
     pub fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
-        for (key, value) in iter {
-            self.insert(key, value);
-        }
+        todo!()
     }
 
     /// Borrow the value at the given `key`, if present.
@@ -193,7 +253,7 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         Arc<K>: Borrow<Q>,
         Q: Eq + Hash + ?Sized,
     {
-        self.inner.get(key)
+        self.list.get(key).map(|item| &item.value)
     }
 
     /// Borrow the entry at the given `key`, if present.
@@ -202,9 +262,9 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         Arc<K>: Borrow<Q>,
         Q: Eq + Hash + ?Sized,
     {
-        self.inner
+        self.list
             .get_key_value(key)
-            .map(|(key, value)| (&**key, value))
+            .map(|(key, item)| (&**key, &item.value))
     }
 
     /// Borrow the value at the given `key` mutably, if present.
@@ -213,45 +273,70 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         Arc<K>: Borrow<Q>,
         Q: Eq + Hash + ?Sized,
     {
-        self.inner.get_mut(key)
+        self.list.get_mut(key).map(|item| &mut item.value)
     }
 
     /// Insert a new `value` at `key` and return the previous value, if any.
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        let old_value = self.remove(&key);
+
         let key = Arc::new(key);
-        if let Some(prev) = self.inner.insert(key.clone(), value) {
-            todo!();
-        } else {
-            self.order.push_back(key);
-            None
+        let next = None;
+        let mut prev = Some(key.clone());
+        mem::swap(&mut self.tail, &mut prev);
+
+        if let Some(prev_key) = &prev {
+            let mut prev = self.list.get::<K>(prev_key).expect("prev").state();
+            prev.next = Some(key.clone());
         }
+
+        if self.head.is_none() {
+            self.head = Some(key.clone());
+        }
+
+        let item = Item {
+            key: key.clone(),
+            value,
+            state: RefCell::new(ItemState { prev, next }),
+        };
+
+        assert!(self.list.insert(key, item).is_none());
+
+        old_value
     }
 
     /// Construct an iterator over the entries in this [`Queue`].
     pub fn iter(&self) -> Iter<K, V> {
         Iter {
-            inner: &self.inner,
-            order: self.order.iter(),
+            list: &self.list,
+            next: self.head.as_ref(),
+            last: self.tail.as_ref(),
+            size: self.len(),
         }
     }
 
     /// Return `true` if this [`Queue`] is empty.
     pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
+        self.list.is_empty()
     }
 
     /// Construct an iterator over keys of this [`Queue`].
-    pub fn keys(&self) -> Keys<K, V> {
+    pub fn keys(&self) -> Keys<K> {
         Keys {
-            inner: &self.inner,
-            order: self.order.iter(),
+            next: self.head.as_ref(),
+            last: self.tail.as_ref(),
+            size: self.len(),
         }
+    }
+
+    /// Return the size of this [`Queue`].
+    pub fn len(&self) -> usize {
+        self.list.len()
     }
 
     /// Remove and return the first value in this [`Queue`].
     pub fn pop_first(&mut self) -> Option<V> {
-        let key = self.order.pop_front()?;
-        self.inner.remove(&*key)
+        todo!()
     }
 
     /// Remove and return the first entry in this [`Queue`].
@@ -259,16 +344,12 @@ impl<K: Eq + Hash, V> Queue<K, V> {
     where
         K: fmt::Debug,
     {
-        let key = self.order.pop_front()?;
-        let (key, value) = self.inner.remove_entry(&*key).expect("entry");
-        let key = Arc::try_unwrap(key).expect("key");
-        Some((key, value))
+        todo!()
     }
 
     /// Remove and return the last value in this [`Queue`].
     pub fn pop_last(&mut self) -> Option<V> {
-        let key = self.order.pop_back()?;
-        self.inner.remove(&*key)
+        todo!()
     }
 
     /// Remove and return the last entry in this [`Queue`].
@@ -276,10 +357,7 @@ impl<K: Eq + Hash, V> Queue<K, V> {
     where
         K: fmt::Debug,
     {
-        let key = self.order.pop_back()?;
-        let (key, value) = self.inner.remove_entry(&*key).expect("entry");
-        let key = Arc::try_unwrap(key).expect("key");
-        Some((key, value))
+        todo!()
     }
 
     /// Remove an entry from this [`Queue`] and return its value, if present.
@@ -288,25 +366,68 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         Arc<K>: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
     {
-        let (key, value) = self.inner.remove_entry(key)?;
-        todo!()
+        let item = self.list.remove(key)?;
+        Some(self.remove_inner(item))
     }
 
     /// Remove and return an entry from this [`Queue`], if present.
     pub fn remove_entry<Q>(&mut self, key: &Q) -> Option<(K, V)>
     where
+        K: fmt::Debug,
         Arc<K>: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
     {
-        let (key, value) = self.inner.remove_entry(key)?;
-        todo!();
+        let (key, item) = self.list.remove_entry(key)?;
+        let key = Arc::try_unwrap(key).expect("key");
+        Some((key, self.remove_inner(item)))
+    }
+
+    fn remove_inner(&mut self, item: Item<K, V>) -> V {
+        let mut item_state = item.state();
+
+        if item_state.prev.is_none() && item_state.next.is_none() {
+            // there was only one item and now the map is empty
+            self.head = None;
+            self.tail = None;
+        } else if item_state.prev.is_none() {
+            // the last item has been removed
+            self.tail = item_state.next.clone();
+
+            let next_key = item_state.next.as_ref().expect("next key");
+            let mut next = self.list.get::<K>(next_key).expect("next").state();
+
+            mem::swap(&mut next.prev, &mut item_state.prev);
+        } else if item_state.next.is_none() {
+            // the first item has been removed
+            self.head = item_state.prev.clone();
+
+            let prev_key = item_state.prev.as_ref().expect("previous key");
+            let mut prev = self.list.get::<K>(prev_key).expect("prev").state();
+
+            mem::swap(&mut prev.next, &mut item_state.next);
+        } else {
+            // an item in the middle has been removed
+            let prev_key = item_state.prev.as_ref().expect("previous key");
+            let mut prev = self.list.get::<K>(prev_key).expect("prev").state();
+
+            let next_key = item_state.next.as_ref().expect("next key");
+            let mut next = self.list.get::<K>(next_key).expect("next item").state();
+
+            mem::swap(&mut next.prev, &mut item_state.prev);
+            mem::swap(&mut prev.next, &mut item_state.next);
+        }
+
+        std::mem::drop(item_state);
+        item.value
     }
 
     /// Construct an iterator over the values in this [`Queue`].
     pub fn values(&self) -> Values<K, V> {
         Values {
-            inner: &self.inner,
-            order: self.order.iter(),
+            list: &self.list,
+            next: self.head.as_ref(),
+            last: self.head.as_ref(),
+            size: self.len(),
         }
     }
 }
@@ -330,9 +451,13 @@ impl<K: Eq + Hash + fmt::Debug, V> IntoIterator for Queue<K, V> {
     type IntoIter = IntoIter<K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
+        let size = self.len();
+
         IntoIter {
-            inner: self.inner,
-            order: self.order.into_iter(),
+            list: self.list,
+            next: self.head,
+            last: self.tail,
+            size,
         }
     }
 }
@@ -346,5 +471,125 @@ impl<K: Eq + Hash + fmt::Debug, V: fmt::Debug> fmt::Debug for Queue<K, V> {
         }
 
         f.write_str("}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fmt;
+
+    use rand::{thread_rng, Rng};
+
+    use super::*;
+
+    #[allow(dead_code)]
+    fn print_debug<K: fmt::Display + Eq + Hash, V>(queue: &Queue<K, V>) {
+        let mut next = queue.head.clone();
+        while let Some(next_key) = next {
+            let item = queue.list.get::<K>(&next_key).expect("item").state();
+
+            if let Some(prev_key) = item.prev.as_ref() {
+                print!("{}-", prev_key);
+            }
+
+            next = item.next.clone();
+            if let Some(next_key) = &next {
+                print!("-{}", next_key);
+            }
+
+            print!(" ");
+        }
+
+        println!();
+    }
+
+    fn validate<K: fmt::Debug + Eq + Hash, V>(queue: &Queue<K, V>) {
+        if queue.list.is_empty() {
+            assert!(queue.head.is_none(), "head is {:?}", queue.head);
+            assert!(queue.tail.is_none(), "tail is {:?}", queue.tail);
+        } else {
+            let first_key = queue.head.as_ref().expect("first key");
+            let first = queue.list.get::<K>(first_key).expect("first item");
+
+            assert!(first.state.borrow().prev.is_none());
+
+            let last_key = queue.tail.as_ref().expect("last key");
+            let last = queue.list.get::<K>(last_key).expect("last item");
+            assert!(last.state.borrow().next.is_none());
+        }
+
+        let mut last = None;
+        let mut next = queue.head.clone();
+        while let Some(key) = next {
+            let item = queue.list.get::<K>(&key).expect("item");
+
+            if let Some(last_key) = &last {
+                let item_state = item.state.borrow();
+                let prev_key = item_state.prev.as_ref().expect("previous key");
+                assert_eq!(last_key, prev_key);
+            }
+
+            last = Some(key);
+            next = item.state.borrow().next.clone();
+        }
+    }
+
+    #[test]
+    fn test_order() {
+        let mut queue = Queue::new();
+        let expected: Vec<i32> = (0..10).collect();
+
+        for i in expected.iter().rev() {
+            queue.insert(*i, i.to_string());
+            validate(&queue);
+        }
+
+        let mut actual = Vec::with_capacity(expected.len());
+        for (i, s) in queue.iter() {
+            assert_eq!(&i.to_string(), s);
+            actual.push(i);
+        }
+
+        assert_eq!(actual.len(), expected.len());
+        assert!(actual.iter().zip(expected).all(|(l, r)| **l == r))
+    }
+
+    #[test]
+    fn test_access() {
+        let mut queue = Queue::new();
+        validate(&queue);
+
+        let mut rng = thread_rng();
+        for _ in 1..100_000 {
+            let i: i32 = rng.gen_range(0..1000);
+            queue.insert(i, i.to_string());
+            validate(&queue);
+
+            let mut size = 0;
+            for _ in queue.iter() {
+                size += 1;
+            }
+
+            assert_eq!(queue.len(), size);
+            assert!(!queue.is_empty());
+
+            let i: i32 = rng.gen_range(0..1000);
+            queue.remove(&i);
+            validate(&queue);
+
+            let mut size = 0;
+            for _ in queue.iter() {
+                size += 1;
+            }
+
+            while !queue.is_empty() {
+                queue.pop_last();
+                validate(&queue);
+                size -= 1;
+                assert_eq!(queue.len(), size);
+            }
+
+            assert_eq!(queue.len(), 0);
+        }
     }
 }
