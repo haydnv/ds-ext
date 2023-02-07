@@ -395,13 +395,14 @@ fn min(nodes: &Nodes, ordinal: &usize) -> usize {
     }
 }
 
+#[cfg(test)]
 mod tests {
+    use super::*;
+    use rand::Rng;
+    use std::collections::BTreeSet;
+
     #[test]
     fn test_tree() {
-        use super::*;
-        use rand::Rng;
-        use std::collections::BTreeSet;
-
         let mut rng = rand::thread_rng();
 
         for size in 0..100 {

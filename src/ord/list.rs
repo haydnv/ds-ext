@@ -131,13 +131,6 @@ impl<T> Inner<T> {
         debug_assert!(self.is_valid());
     }
 
-    // TODO: delete
-    fn insert_unchecked(&mut self, ordinal: usize, node: Node<T>) {
-        if self.list.insert(ordinal, node).is_none() {
-            self.tree.insert(ordinal);
-        }
-    }
-
     fn is_empty(&self) -> bool {
         self.list.is_empty()
     }
@@ -446,6 +439,7 @@ impl<T> List<T> {
                     "cannot insert at index {} in an empty list",
                     index
                 );
+
                 self.push_front(value)
             }
             1 => match index {
@@ -739,19 +733,14 @@ impl<T> List<T> {
                 self.inner.insert(0, node);
             }
             1 => {
-                let mut back = self.inner.remove(0);
-                debug_assert!(back.next.is_none());
-                back.prev = Some(0);
-
-                let front = Node {
+                let node = Node {
                     value: RefCell::new(value),
-                    prev: None,
-                    next: Some(Self::MAX_LEN),
+                    prev: Some(0),
+                    next: None,
                 };
 
-                self.inner.insert_unchecked(0, front);
-                self.inner.insert_unchecked(Self::MAX_LEN, back);
-                debug_assert!(self.inner.is_valid());
+                self.inner.insert(Self::MAX_LEN, node);
+                self.inner.swap(&0, &Self::MAX_LEN);
             }
             2 => {
                 let new_ordinal = Self::MAX_LEN >> 1;
@@ -897,12 +886,13 @@ impl<'a, T> IntoIterator for &'a List<T> {
     }
 }
 
+#[cfg(test)]
 mod tests {
+    use super::*;
+    use rand::Rng;
+
     #[test]
     fn test_list() {
-        use super::*;
-        use rand::Rng;
-
         let mut rng = rand::thread_rng();
 
         for i in 0..64 {
