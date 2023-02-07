@@ -101,11 +101,6 @@ impl<T> Inner<T> {
         self.list.get(ordinal).expect("node")
     }
 
-    // TODO: delete
-    fn get_mut(&mut self, ordinal: &usize) -> &mut Node<T> {
-        self.list.get_mut(ordinal).expect("node")
-    }
-
     fn get_value(&self, ordinal: &usize) -> Option<Ref<T>> {
         self.list.get(ordinal).map(|node| node.value.borrow())
     }
@@ -118,11 +113,13 @@ impl<T> Inner<T> {
         debug_assert!(self.is_valid());
 
         if let Some(prev) = node.prev.as_ref() {
+            debug_assert!(prev < &ordinal);
             let prev = self.list.get_mut(prev).expect("prev");
             prev.next = Some(ordinal);
         }
 
         if let Some(next) = node.next.as_ref() {
+            debug_assert!(next > &ordinal);
             let next = self.list.get_mut(next).expect("next");
             next.prev = Some(ordinal);
         }
@@ -174,13 +171,16 @@ impl<T> Inner<T> {
         node
     }
 
-    fn swap(&self, from: &usize, to: &usize) {
+    fn swap(&mut self, from: &usize, to: &usize) {
         debug_assert!(self.is_valid());
+        debug_assert!(self.list.contains_key(to));
 
         match from.cmp(to) {
             Ordering::Less => {
                 let mut node = self.get(from);
                 while let Some(next) = node.next.as_ref() {
+                    debug_assert!(next > from);
+
                     let next_node = self.get(next);
 
                     mem::swap(
@@ -199,6 +199,8 @@ impl<T> Inner<T> {
             Ordering::Greater => {
                 let mut node = self.get(from);
                 while let Some(prev) = node.prev.as_ref() {
+                    debug_assert!(prev < from);
+
                     let prev_node = self.get(prev);
 
                     mem::swap(
@@ -605,6 +607,17 @@ impl<T> List<T> {
 
                 self.inner.insert(Self::MAX_LEN, node)
             }
+            2 => {
+                let new_ordinal = Self::MAX_LEN >> 1;
+                let new_node = Node {
+                    value: RefCell::new(value),
+                    prev: Some(0),
+                    next: Some(Self::MAX_LEN),
+                };
+
+                self.inner.insert(new_ordinal, new_node);
+                self.inner.swap(&new_ordinal, &Self::MAX_LEN);
+            }
             _ => {
                 // traverse back to find the lowest-density insertion point
                 let mut ordinal = Self::MAX_LEN;
@@ -674,30 +687,61 @@ impl<T> List<T> {
                 self.inner.insert_unchecked(Self::MAX_LEN, back);
                 debug_assert!(self.inner.is_valid());
             }
-            _ => {
-                // TODO: traverse forward to insert the new value at the largest empty range
-                // then traverse backward swapping the values
-
-                let mut node = self.inner.remove(0);
-                assert_eq!(node.prev, None);
-                node.prev = Some(0);
-
-                let next_ordinal = node.next.expect("next");
-                let ordinal = next_ordinal >> 1;
-
-                let front = Node {
+            2 => {
+                let new_ordinal = Self::MAX_LEN >> 1;
+                let new_node = Node {
                     value: RefCell::new(value),
-                    prev: None,
+                    prev: Some(0),
+                    next: Some(Self::MAX_LEN),
+                };
+
+                self.inner.insert(new_ordinal, new_node);
+                self.inner.swap(&new_ordinal, &0);
+            }
+            _ => {
+                debug_assert!(self.inner.is_valid());
+
+                // traverse forward to find the lowest-density insertion point
+                let mut ordinal = 0;
+                let mut gap = 0;
+
+                loop {
+                    let node = self.inner.get(&ordinal);
+
+                    if let Some(next) = node.next {
+                        let next_gap = next - ordinal;
+
+                        debug_assert!(next_gap > 2);
+                        debug_assert_eq!(ordinal + next_gap, next);
+                        debug_assert!(self.inner.list.contains_key(&(ordinal + next_gap)));
+
+                        if next_gap <= gap {
+                            break;
+                        } else {
+                            gap = next_gap;
+                            ordinal = next;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                debug_assert!(gap > 0);
+                debug_assert!(self.inner.list.contains_key(&ordinal));
+                debug_assert!(self.inner.list.contains_key(&(ordinal - gap)));
+
+                // then insert the new value
+                let new_ordinal = ordinal - (gap >> 1);
+                let new_node = Node {
+                    value: RefCell::new(value),
+                    prev: Some(ordinal - gap),
                     next: Some(ordinal),
                 };
 
-                self.inner.insert_unchecked(0, front);
-                self.inner.insert_unchecked(ordinal, node);
+                self.inner.insert(new_ordinal, new_node);
 
-                let next = self.inner.get_mut(&next_ordinal);
-                next.prev = Some(ordinal);
-
-                debug_assert!(self.inner.is_valid());
+                // and swap it backward
+                self.inner.swap(&new_ordinal, &0);
             }
         }
     }
