@@ -305,6 +305,18 @@ where
     T: Borrow<Q> + Ord,
     Q: Ord,
 {
+    if let Some(front) = list.front() {
+        if target < front.borrow() {
+            return 0;
+        }
+    }
+
+    if let Some(last) = list.back() {
+        if target > last.borrow() {
+            return list.len();
+        }
+    }
+
     let mut lo = 0;
     let mut hi = list.len();
 

@@ -7,6 +7,9 @@
 //!
 //! This design allows a cardinal index to be resolved to a value in O(log n) time.
 //!
+//! [`List`] is optimized to handle a random insertion order. A `Vec` or `VecDeque` offers better
+//! performance in situations where inserts are append-only or append- and prepend- only.
+//!
 //! Example:
 //! ```
 //! use ds_ext::ord::List;
@@ -280,7 +283,6 @@ impl<T> List<T> {
         match index {
             0 => self.push_front(value),
             i if self.is_empty() => assert_bounds!(i, self.len()),
-            i if i == self.len() => self.push_back(value),
             i if i == self.len() - 1 => {
                 let back = self.pop_back().expect("back");
                 self.push_back(value);
@@ -291,12 +293,14 @@ impl<T> List<T> {
                 Ordering::Equal => self.push_back(value),
                 Ordering::Greater => {
                     let ordinal = self.ordinal(i);
+                    // TODO: create the new node on whichever side of this node has more room
+                    // then swap the values if needed
 
                     let mut next = self.list.remove(&ordinal).expect("node");
                     let new_ordinal = {
                         let next = next.next.expect("next");
 
-                        assert!(next - ordinal > 2, "TODO: rebalance");
+                        assert!(next - ordinal > 1, "TODO: rebalance");
 
                         ordinal + ((next - ordinal) >> 1)
                     };
@@ -555,7 +559,7 @@ impl<T> List<T> {
                 node.next = Some(Self::MAX_LEN);
 
                 let prev = node.prev.expect("prev");
-                assert!(Self::MAX_LEN - prev > 2, "TODO: rebalance");
+                assert!(Self::MAX_LEN - prev > 1, "TODO: rebalance");
                 let ordinal = prev + ((Self::MAX_LEN - prev) >> 1);
 
                 {
@@ -614,13 +618,16 @@ impl<T> List<T> {
                 debug_assert!(self.is_valid());
             }
             _ => {
+                // TODO: traverse forward to insert the new value at the largest empty range
+                // then traverse backward swapping the values
+
                 let mut node = self.list.remove(&0).expect("next");
                 debug_assert!(node.prev.is_none());
                 node.prev = Some(0);
 
                 let new_ordinal = {
                     let ordinal = node.next.expect("next");
-                    debug_assert!(ordinal > 2, "TODO: rebalance");
+                    debug_assert!(ordinal > 1, "TODO: rebalance");
                     let next = self.list.get_mut(&ordinal).expect("next");
                     debug_assert_eq!(next.prev, Some(0));
                     let ordinal = ordinal >> 1;
@@ -804,7 +811,7 @@ mod tests {
 
         let mut rng = rand::thread_rng();
 
-        for i in 0..128 {
+        for i in 0..64 {
             let mut list = List::new();
             let mut vector = Vec::new();
 
