@@ -439,16 +439,38 @@ impl<T> List<T> {
 
     /// Insert a new `value` at the given `index`.
     pub fn insert(&mut self, index: usize, value: T) {
-        match index {
-            0 => self.push_front(value),
-            i if self.is_empty() => assert_bounds!(i, self.len()),
-            i => match self.len().cmp(&i) {
-                Ordering::Less => assert_bounds!(i, self.len()),
-                Ordering::Equal => self.push_back(value),
-                Ordering::Greater => {
-                    // TODO: create the new node on whichever side of this node has more room
-                    // then swap the values if needed
+        match self.len() {
+            0 => {
+                assert_eq!(
+                    index, 0,
+                    "cannot insert at index {} in an empty list",
+                    index
+                );
+                self.push_front(value)
+            }
+            1 => match index {
+                0 => self.push_front(value),
+                1 => self.push_back(value),
+                i => panic!("cannot insert at index {} in a single-item list", i),
+            },
+            2 => match index {
+                0 => self.push_front(value),
+                1 => {
+                    let node = Node {
+                        value: RefCell::new(value),
+                        prev: Some(0),
+                        next: Some(Self::MAX_LEN),
+                    };
 
+                    self.inner.insert(Self::MAX_LEN >> 1, node);
+                }
+                2 => self.push_back(value),
+                i => panic!("cannot insert at index {} in a list of length {}", i, 2),
+            },
+            len => match index {
+                0 => self.push_front(value),
+                i if i == len => self.push_back(value),
+                i if i == len - 1 => {
                     let next_ordinal = self.ordinal(i);
                     let next = self.inner.get(&next_ordinal);
                     let prev_ordinal = next.prev.expect("prev");
@@ -461,6 +483,40 @@ impl<T> List<T> {
                     };
 
                     self.inner.insert(ordinal, node);
+                }
+                i => {
+                    assert_bounds!(index, len);
+                    let ordinal = self.ordinal(i);
+
+                    let (prev, next) = {
+                        let node = self.inner.get(&ordinal);
+                        let prev = node.prev.expect("prev");
+                        let next = node.next.expect("next");
+                        if (ordinal - prev) >= (next - ordinal) {
+                            (prev, ordinal)
+                        } else {
+                            (ordinal, next)
+                        }
+                    };
+
+                    debug_assert!(prev < next);
+
+                    let new_ordinal = prev + ((next - prev) >> 1);
+                    let new_node = Node {
+                        value: RefCell::new(value),
+                        prev: Some(prev),
+                        next: Some(next),
+                    };
+
+                    debug_assert!(!self.inner.list.contains_key(&new_ordinal));
+
+                    self.inner.insert(new_ordinal, new_node);
+
+                    if next == ordinal {
+                        // done
+                    } else {
+                        self.inner.swap(&ordinal, &new_ordinal);
+                    }
                 }
             },
         }
@@ -571,7 +627,14 @@ impl<T> List<T> {
         } else {
             let back = self.inner.remove(Self::MAX_LEN);
             let new_back = self.inner.remove(back.prev.expect("prev"));
-            self.inner.insert(Self::MAX_LEN, new_back);
+
+            if self.inner.is_empty() {
+                self.inner.insert(0, new_back);
+            } else {
+                self.inner.insert(Self::MAX_LEN, new_back);
+            }
+
+            debug_assert!(self.inner.list.contains_key(&0));
             Some(back)
         };
 
@@ -628,7 +691,10 @@ impl<T> List<T> {
 
                     if let Some(prev) = node.prev {
                         let prev_gap = ordinal - prev;
+
                         debug_assert!(prev_gap > 2);
+                        debug_assert_eq!(ordinal - prev_gap, prev);
+                        debug_assert!(self.inner.list.contains_key(&(ordinal - prev_gap)));
 
                         if prev_gap <= gap {
                             break;
@@ -642,7 +708,7 @@ impl<T> List<T> {
                 }
 
                 debug_assert!(gap > 0);
-                debug_assert!(ordinal > gap);
+                debug_assert!(ordinal >= gap);
 
                 // then insert the new value
                 let new_ordinal = ordinal - (gap >> 1);
