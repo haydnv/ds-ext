@@ -1,7 +1,7 @@
 //! A hash map ordered by key using a linked hash set
 
 use std::borrow::Borrow;
-use std::collections::HashMap as Inner;
+use std::collections::{HashMap as Inner, HashMap};
 use std::fmt;
 use std::hash::Hash;
 use std::sync::Arc;
@@ -54,8 +54,8 @@ impl<'a, K: Eq + Hash, V> Iterator for Iter<'a, K, V> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let key = &**self.order.next()?;
-        let value = self.inner.get(key).expect("entry");
-        Some((key, value))
+        let (key, value) = self.inner.get_key_value(key).expect("entry");
+        Some((&**key, value))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -65,22 +65,25 @@ impl<'a, K: Eq + Hash, V> Iterator for Iter<'a, K, V> {
 
 impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Iter<'a, K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let key = &**self.order.next_back()?;
-        let value = self.inner.get(key).expect("entry");
-        Some((key, value))
+        let key = self.order.next_back()?;
+        let (key, value) = self.inner.get_key_value(&**key).expect("entry");
+        Some((&**key, value))
     }
 }
 
 /// An iterator over the keys in a [`LinkedHashMap`]
-pub struct Keys<'a, K> {
+pub struct Keys<'a, K, V> {
+    inner: &'a HashMap<Arc<K>, V>,
     order: super::set::Iter<'a, Arc<K>>,
 }
 
-impl<'a, K> Iterator for Keys<'a, K> {
+impl<'a, K: Eq + Hash, V> Iterator for Keys<'a, K, V> {
     type Item = &'a K;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.order.next().map(|key| &***key)
+        let key = self.order.next()?;
+        let (key, _) = self.inner.get_key_value(&***key).expect("entry");
+        Some(&**key)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -88,9 +91,11 @@ impl<'a, K> Iterator for Keys<'a, K> {
     }
 }
 
-impl<'a, K> DoubleEndedIterator for Keys<'a, K> {
+impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Keys<'a, K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.order.next_back().map(|key| &***key)
+        let key = self.order.next_back()?;
+        let (key, _) = self.inner.get_key_value(&***key).expect("entry");
+        Some(&**key)
     }
 }
 
@@ -217,8 +222,9 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
     }
 
     /// Construct an iterator over keys of this [`LinkedHashMap`].
-    pub fn keys(&self) -> Keys<K> {
+    pub fn keys(&self) -> Keys<K, V> {
         Keys {
+            inner: &self.inner,
             order: self.order.iter(),
         }
     }

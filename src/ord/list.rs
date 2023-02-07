@@ -21,32 +21,34 @@
 //!
 //! assert_eq!(list.pop_front(), Some("zero"));
 //! assert_eq!(list.len(), 0);
-//! assert_eq!(list.get(0), None);
+//! assert!(list.get(0).is_none());
 //!
 //! list.push_back("zero");
 //! assert_eq!(list.len(), 1);
-//! assert_eq!(list.get(0), Some(&"zero"));
+//! assert_eq!(*list.get(0).expect("0"), "zero");
 //!
 //! assert_eq!(list.pop_back(), Some("zero"));
 //! assert_eq!(list.len(), 0);
-//! assert_eq!(list.get(0), None);
+//! assert!(list.get(0).is_none());
 //!
 //! list.push_front("zero");
 //! list.push_back("three");
 //! list.insert(1, "two point five");
 //! list.insert(1, "one");
 //! list.insert(2, "two");
+//!
 //! assert_eq!(list.remove(3), Some("two point five"));
 //! assert_eq!(list.len(), 4);
 //! assert_eq!(list.iter().size_hint(), (4, Some(4)));
 //! assert_eq!(list.range(1..3).size_hint(), (2, Some(2)));
-//! assert_eq!(list.range(1..3).collect::<Vec<_>>(), [&"one", &"two"]);
+//! assert_eq!(list.range(1..3).map(|s| *s).collect::<Vec<_>>(), ["one", "two"]);
 //! assert_eq!(list.into_iter().collect::<Vec<_>>(), ["zero", "one", "two", "three"]);
 //! ```
 
+use std::cell::{Ref, RefCell, RefMut};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::ops::{Bound, Deref, DerefMut, Index, IndexMut, RangeBounds};
+use std::ops::{Bound, RangeBounds};
 
 use super::tree::Tree;
 
@@ -61,24 +63,140 @@ macro_rules! assert_bounds {
     };
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 struct Node<T> {
-    value: T,
+    value: RefCell<T>,
     prev: Option<usize>,
     next: Option<usize>,
 }
 
-impl<T> Deref for Node<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
+#[derive(Clone, Debug)]
+struct Inner<T> {
+    list: HashMap<usize, Node<T>>,
+    tree: Tree,
 }
 
-impl<T> DerefMut for Node<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.value
+impl<T> Inner<T> {
+    fn new() -> Self {
+        Self {
+            list: HashMap::new(),
+            tree: Tree::new(),
+        }
+    }
+
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            list: HashMap::with_capacity(capacity),
+            tree: Tree::with_capacity(capacity),
+        }
+    }
+
+    fn clear(&mut self) {
+        self.list.clear();
+        self.tree.clear();
+    }
+
+    fn get(&self, ordinal: &usize) -> &Node<T> {
+        self.list.get(ordinal).expect("node")
+    }
+
+    // TODO: delete
+    fn get_mut(&mut self, ordinal: &usize) -> &mut Node<T> {
+        self.list.get_mut(ordinal).expect("node")
+    }
+
+    fn get_value(&self, ordinal: &usize) -> Option<Ref<T>> {
+        self.list.get(ordinal).map(|node| node.value.borrow())
+    }
+
+    fn get_value_mut(&mut self, ordinal: &usize) -> Option<RefMut<T>> {
+        self.list.get(ordinal).map(|node| node.value.borrow_mut())
+    }
+
+    fn insert(&mut self, ordinal: usize, node: Node<T>) {
+        debug_assert!(self.is_valid());
+
+        if let Some(prev) = node.prev.as_ref() {
+            let prev = self.list.get_mut(prev).expect("prev");
+            prev.next = Some(ordinal);
+        }
+
+        if let Some(next) = node.next.as_ref() {
+            let next = self.list.get_mut(next).expect("next");
+            next.prev = Some(ordinal);
+        }
+
+        if self.list.insert(ordinal, node).is_none() {
+            self.tree.insert(ordinal);
+        }
+
+        debug_assert!(self.is_valid());
+    }
+
+    // TODO: delete
+    fn insert_unchecked(&mut self, ordinal: usize, node: Node<T>) {
+        if self.list.insert(ordinal, node).is_none() {
+            self.tree.insert(ordinal);
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.list.is_empty()
+    }
+
+    fn len(&self) -> usize {
+        self.list.len()
+    }
+
+    fn ordinal(&self, cardinal: usize) -> usize {
+        self.tree.ordinal(cardinal)
+    }
+
+    fn remove(&mut self, ordinal: usize) -> Node<T> {
+        debug_assert!(self.is_valid());
+
+        let node = self.list.remove(&ordinal).expect("node");
+        self.tree.remove(ordinal);
+
+        if let Some(prev) = node.prev.as_ref() {
+            let prev = self.list.get_mut(prev).expect("prev");
+            prev.next = node.next;
+        }
+
+        if let Some(next) = node.next.as_ref() {
+            let next = self.list.get_mut(next).expect("next");
+            next.prev = node.prev;
+        }
+
+        debug_assert!(self.is_valid());
+
+        node
+    }
+
+    fn is_valid(&self) -> bool {
+        assert_eq!(self.list.len(), self.tree.size());
+
+        if self.list.is_empty() {
+            assert!(self.tree.is_empty());
+            return true;
+        }
+
+        let mut prev = None;
+        for cardinal in 0..self.len() {
+            let ordinal = self.tree.ordinal(cardinal);
+
+            let node = self.list.get(&ordinal).expect("node");
+            assert_eq!(node.prev, prev);
+            prev = Some(ordinal);
+
+            if let Some(next) = node.next {
+                assert_eq!(self.tree.ordinal(cardinal + 1), next);
+            } else {
+                assert_eq!(node.next, None);
+            }
+        }
+
+        true
     }
 }
 
@@ -109,7 +227,7 @@ impl<T> Iterator for IntoIter<T> {
             self.last = None;
         }
 
-        Some(node.value)
+        Some(node.value.into_inner())
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -134,7 +252,7 @@ impl<T> DoubleEndedIterator for IntoIter<T> {
             self.next = None;
         }
 
-        Some(node.value)
+        Some(node.value.into_inner())
     }
 }
 
@@ -147,7 +265,7 @@ pub struct Iter<'a, T> {
 }
 
 impl<'a, T> Iterator for Iter<'a, T> {
-    type Item = &'a T;
+    type Item = Ref<'a, T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let ordinal = self.next?;
@@ -165,7 +283,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
             self.size -= 1;
         }
 
-        Some(&node.value)
+        Some(node.value.borrow())
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -190,15 +308,14 @@ impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
             self.next = None;
         }
 
-        Some(&node.value)
+        Some(node.value.borrow())
     }
 }
 
-/// A linked ord with cardinal indexing and O(log n) get/insert/remove by index
+/// A linked list with cardinal indexing and O(log n) get/insert/remove by index
 #[derive(Clone, Debug)]
 pub struct List<T> {
-    list: HashMap<usize, Node<T>>,
-    tree: Tree,
+    inner: Inner<T>,
 }
 
 impl<T> List<T> {
@@ -207,70 +324,67 @@ impl<T> List<T> {
     /// Create a new empty [`List`].
     pub fn new() -> Self {
         Self {
-            list: HashMap::new(),
-            tree: Tree::new(),
+            inner: Inner::new(),
         }
     }
 
     /// Create a new empty [`List`] with the given `capacity`.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            list: HashMap::with_capacity(capacity),
-            tree: Tree::with_capacity(capacity),
+            inner: Inner::with_capacity(capacity),
         }
     }
 
     /// Borrow the last element in this [`List`], if any.
-    pub fn back(&self) -> Option<&T> {
+    pub fn back(&self) -> Option<Ref<T>> {
         let ordinal = if self.len() <= 1 { 0 } else { Self::MAX_LEN };
-        self.list.get(&ordinal).map(Deref::deref)
+        self.inner.get_value(&ordinal)
     }
 
     /// Borrow the last element in this [`List`], if any.
-    pub fn back_mut(&mut self) -> Option<&mut T> {
+    pub fn back_mut(&mut self) -> Option<RefMut<T>> {
         let ordinal = if self.len() <= 1 { 0 } else { Self::MAX_LEN };
-        self.list.get_mut(&ordinal).map(DerefMut::deref_mut)
+        self.inner.get_value_mut(&ordinal)
     }
 
     /// Remove all elements from this [`List`].
     pub fn clear(&mut self) {
-        self.list.clear();
-        self.tree.clear();
+        self.inner.clear()
     }
 
     /// Borrow the first element in this [`List`], if any.
-    pub fn front(&self) -> Option<&T> {
-        self.list.get(&0).map(Deref::deref)
+    pub fn front(&self) -> Option<Ref<T>> {
+        self.inner.get_value(&0)
     }
 
     /// Borrow the last element in this [`List`], if any.
-    pub fn front_mut(&mut self) -> Option<&mut T> {
-        self.list.get_mut(&0).map(DerefMut::deref_mut)
+    pub fn front_mut(&mut self) -> Option<RefMut<T>> {
+        self.inner.get_value_mut(&0)
     }
 
     /// Borrow the element at the given `index`, if any.
-    pub fn get(&self, index: usize) -> Option<&T> {
+    pub fn get(&self, index: usize) -> Option<Ref<T>> {
         if index == 0 {
             self.front()
         } else if index == (self.len() - 1) {
             self.back()
         } else if index < self.len() {
             let ordinal = self.ordinal(index);
-            self.list.get(&ordinal).map(Deref::deref)
+            self.inner.get_value(&ordinal)
         } else {
             None
         }
     }
 
     /// Borrow the element at the given `index` mutably, if any.
-    pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+    pub fn get_mut(&mut self, index: usize) -> Option<RefMut<T>> {
         if index == 0 {
             self.front_mut()
         } else if index == (self.len() - 1) {
             self.back_mut()
         } else if index < self.len() {
             let ordinal = self.ordinal(index);
-            self.list.get_mut(&ordinal).map(DerefMut::deref_mut)
+            self.inner.get_value_mut(&ordinal)
         } else {
             None
         }
@@ -278,56 +392,28 @@ impl<T> List<T> {
 
     /// Insert a new `value` at the given `index`.
     pub fn insert(&mut self, index: usize, value: T) {
-        debug_assert!(self.is_valid());
-
         match index {
             0 => self.push_front(value),
             i if self.is_empty() => assert_bounds!(i, self.len()),
-            i if i == self.len() - 1 => {
-                let back = self.pop_back().expect("back");
-                self.push_back(value);
-                self.push_back(back);
-            }
             i => match self.len().cmp(&i) {
                 Ordering::Less => assert_bounds!(i, self.len()),
                 Ordering::Equal => self.push_back(value),
                 Ordering::Greater => {
-                    let ordinal = self.ordinal(i);
                     // TODO: create the new node on whichever side of this node has more room
                     // then swap the values if needed
 
-                    let mut next = self.list.remove(&ordinal).expect("node");
-                    let new_ordinal = {
-                        let next = next.next.expect("next");
-
-                        assert!(next - ordinal > 1, "TODO: rebalance");
-
-                        ordinal + ((next - ordinal) >> 1)
-                    };
-
-                    {
-                        let next_next = self
-                            .list
-                            .get_mut(next.next.as_ref().expect("next"))
-                            .expect("next");
-
-                        next_next.prev = Some(new_ordinal);
-                    }
+                    let next_ordinal = self.ordinal(i);
+                    let next = self.inner.get(&next_ordinal);
+                    let prev_ordinal = next.prev.expect("prev");
+                    let ordinal = prev_ordinal + ((next_ordinal - prev_ordinal) >> 1);
 
                     let node = Node {
-                        value,
-                        prev: next.prev,
-                        next: Some(new_ordinal),
+                        value: RefCell::new(value),
+                        prev: Some(prev_ordinal),
+                        next: Some(next_ordinal),
                     };
 
-                    next.prev = Some(ordinal);
-
-                    self.list.insert(new_ordinal, next);
-                    self.tree.insert(new_ordinal);
-
-                    self.list.insert(ordinal, node);
-
-                    debug_assert!(self.is_valid());
+                    self.inner.insert(ordinal, node);
                 }
             },
         }
@@ -335,12 +421,10 @@ impl<T> List<T> {
 
     /// Iterate over all elements in this [`List`].
     pub fn iter(&self) -> Iter<T> {
-        debug_assert!(self.is_valid());
-
         let next = if self.is_empty() { None } else { Some(0) };
 
         Iter {
-            inner: &self.list,
+            inner: &self.inner.list,
             size: self.len(),
             next,
             stop: None,
@@ -349,12 +433,12 @@ impl<T> List<T> {
 
     /// Return `true` if this [`List`] is empty.
     pub fn is_empty(&self) -> bool {
-        self.list.is_empty()
+        self.inner.is_empty()
     }
 
     /// Return the length of this [`List`].
     pub fn len(&self) -> usize {
-        self.list.len()
+        self.inner.len()
     }
 
     /// Iterate over the given `range` of elements in this [`List`].
@@ -370,19 +454,19 @@ impl<T> List<T> {
         }
 
         if self.is_empty() {
-            return empty(&self.list);
+            return empty(&self.inner.list);
         }
 
         let start = match range.start_bound() {
             Bound::Included(start) => match self.len().cmp(start) {
-                Ordering::Less | Ordering::Equal => return empty(&self.list),
+                Ordering::Less | Ordering::Equal => return empty(&self.inner.list),
                 Ordering::Greater => Some(*start),
             },
             Bound::Excluded(start) => match self.len().cmp(start) {
-                Ordering::Less | Ordering::Equal => return empty(&self.list),
+                Ordering::Less | Ordering::Equal => return empty(&self.inner.list),
                 Ordering::Greater => {
                     if *start == self.len() - 1 {
-                        return empty(&self.list);
+                        return empty(&self.inner.list);
                     } else {
                         Some(start + 1)
                     }
@@ -408,7 +492,7 @@ impl<T> List<T> {
         let stop = end.map(|i| self.ordinal(i));
 
         Iter {
-            inner: &self.list,
+            inner: &self.inner.list,
             size,
             next,
             stop,
@@ -425,111 +509,42 @@ impl<T> List<T> {
             return None;
         }
 
-        debug_assert!(self.is_valid());
-
         let ordinal = self.ordinal(index);
-        let node = self.list.remove(&ordinal).expect("node");
-        self.tree.remove(ordinal);
+        let node = self.inner.remove(ordinal);
 
-        let prev = node.prev.expect("prev");
-        let next = node.next.expect("next");
-
-        {
-            let prev = self.list.get_mut(&prev).expect("prev");
-            prev.next = Some(next);
-        }
-
-        {
-            let next = self.list.get_mut(&next).expect("next");
-            next.prev = Some(prev);
-        }
-
-        debug_assert!(self.is_valid());
-
-        Some(node.value)
+        Some(node.value.into_inner())
     }
 
     /// Remove and return the last value in this [`List`].
     pub fn pop_back(&mut self) -> Option<T> {
-        debug_assert!(self.is_valid());
-
-        if self.is_empty() {
-            return None;
+        let node = if self.is_empty() {
+            None
         } else if self.len() == 1 {
-            self.tree.remove(0);
-            debug_assert!(self.tree.is_empty());
-            let back = self.list.remove(&0).map(|node| node.value);
-            debug_assert!(self.list.is_empty());
-            return back;
-        }
+            Some(self.inner.remove(0))
+        } else {
+            let back = self.inner.remove(Self::MAX_LEN);
+            let new_back = self.inner.remove(back.prev.expect("prev"));
+            self.inner.insert(Self::MAX_LEN, new_back);
+            Some(back)
+        };
 
-        let next = self.list.remove(&Self::MAX_LEN)?;
-
-        match next.prev.expect("node") {
-            0 => {
-                let front = self.list.get_mut(&0).expect("front");
-                front.next = None;
-
-                self.tree.remove(Self::MAX_LEN);
-            }
-            ordinal => {
-                self.tree.remove(ordinal);
-
-                let mut node = self.list.remove(&ordinal).expect("node");
-                debug_assert_eq!(node.next, Some(Self::MAX_LEN));
-                node.next = None;
-
-                if let Some(prev) = node.prev.as_ref() {
-                    let prev = self.list.get_mut(prev).expect("prev");
-                    prev.next = Some(Self::MAX_LEN);
-                }
-
-                self.list.insert(Self::MAX_LEN, node);
-            }
-        }
-
-        debug_assert!(self.is_valid());
-
-        Some(next.value)
+        node.map(|node| node.value.into_inner())
     }
 
     /// Remove and return the first value in this [`List`].
     pub fn pop_front(&mut self) -> Option<T> {
-        debug_assert!(self.is_valid());
+        let node = if self.is_empty() {
+            None
+        } else if self.len() == 1 {
+            Some(self.inner.remove(0))
+        } else {
+            let front = self.inner.remove(0);
+            let new_front = self.inner.remove(front.next.expect("next"));
+            self.inner.insert(0, new_front);
+            Some(front)
+        };
 
-        if self.is_empty() {
-            debug_assert!(self.tree.is_empty());
-            return None;
-        }
-
-        let prev = self.list.remove(&0)?;
-        if self.list.is_empty() {
-            self.tree.remove(0);
-            debug_assert!(self.tree.is_empty());
-            return Some(prev.value);
-        }
-
-        let ordinal = prev.next.expect("node");
-        let mut node = self.list.remove(&ordinal).expect("node");
-        self.tree.remove(ordinal);
-
-        debug_assert_eq!(node.prev, Some(0));
-        node.prev = None;
-
-        {
-            let next = self
-                .list
-                .get_mut(node.next.as_ref().expect("next"))
-                .expect("next");
-
-            next.prev = Some(0)
-        }
-
-        self.list.insert(0, node);
-
-        debug_assert!(self.is_valid());
-
-        Some(prev.value)
+        node.map(|node| node.value.into_inner())
     }
 
     /// Append the given `value` to the back of this [`List`].
@@ -537,115 +552,94 @@ impl<T> List<T> {
         match self.len() {
             0 => self.push_front(value),
             1 => {
-                debug_assert!(self.is_valid());
-
-                self.list.get_mut(&0).expect("front").next = Some(Self::MAX_LEN);
-
                 let node = Node {
-                    value,
+                    value: RefCell::new(value),
                     prev: Some(0),
                     next: None,
                 };
 
-                self.tree.insert(Self::MAX_LEN);
-                self.list.insert(Self::MAX_LEN, node);
-
-                debug_assert!(self.is_valid());
+                self.inner.insert(Self::MAX_LEN, node)
             }
             _ => {
-                debug_assert!(self.is_valid());
+                // TODO: traverse back to find the lowest-density insertion point
+                // then swap the new value forward
 
-                let mut node = self.list.remove(&Self::MAX_LEN).expect("back");
+                let mut node = self.inner.remove(Self::MAX_LEN);
+                assert_eq!(node.next, None);
                 node.next = Some(Self::MAX_LEN);
 
-                let prev = node.prev.expect("prev");
-                assert!(Self::MAX_LEN - prev > 1, "TODO: rebalance");
-                let ordinal = prev + ((Self::MAX_LEN - prev) >> 1);
+                let prev_ordinal = node.prev.expect("prev");
+                let ordinal = prev_ordinal + ((Self::MAX_LEN - prev_ordinal) >> 1);
 
-                {
-                    let prev = self.list.get_mut(&prev).expect("prev");
-                    prev.next = Some(ordinal);
-                }
-
-                self.tree.insert(ordinal);
-                self.list.insert(ordinal, node);
-
-                let next = Node {
-                    value,
+                let back = Node {
+                    value: RefCell::new(value),
                     prev: Some(ordinal),
                     next: None,
                 };
 
-                self.list.insert(Self::MAX_LEN, next);
+                {
+                    let prev = self.inner.get_mut(&prev_ordinal);
+                    prev.next = Some(ordinal);
+                }
 
-                debug_assert!(self.is_valid());
+                self.inner.insert_unchecked(ordinal, node);
+                self.inner.insert_unchecked(Self::MAX_LEN, back);
+                debug_assert!(self.inner.is_valid());
             }
         }
     }
 
     /// Append the given `value` to the front of this [`List`].
     pub fn push_front(&mut self, value: T) {
-        debug_assert!(self.is_valid());
-
         match self.len() {
             0 => {
                 let node = Node {
-                    value,
+                    value: RefCell::new(value),
                     prev: None,
                     next: None,
                 };
 
-                self.tree.insert(0);
-                self.list.insert(0, node);
-
-                debug_assert!(self.is_valid());
+                self.inner.insert(0, node);
             }
             1 => {
-                let mut back = self.list.remove(&0).expect("back");
+                let mut back = self.inner.remove(0);
                 debug_assert!(back.next.is_none());
                 back.prev = Some(0);
 
                 let front = Node {
-                    value,
+                    value: RefCell::new(value),
                     prev: None,
                     next: Some(Self::MAX_LEN),
                 };
 
-                self.list.insert(0, front);
-                self.list.insert(Self::MAX_LEN, back);
-                self.tree.insert(Self::MAX_LEN);
-
-                debug_assert!(self.is_valid());
+                self.inner.insert_unchecked(0, front);
+                self.inner.insert_unchecked(Self::MAX_LEN, back);
+                debug_assert!(self.inner.is_valid());
             }
             _ => {
                 // TODO: traverse forward to insert the new value at the largest empty range
                 // then traverse backward swapping the values
 
-                let mut node = self.list.remove(&0).expect("next");
-                debug_assert!(node.prev.is_none());
+                let mut node = self.inner.remove(0);
+                assert_eq!(node.prev, None);
                 node.prev = Some(0);
 
-                let new_ordinal = {
-                    let ordinal = node.next.expect("next");
-                    debug_assert!(ordinal > 1, "TODO: rebalance");
-                    let next = self.list.get_mut(&ordinal).expect("next");
-                    debug_assert_eq!(next.prev, Some(0));
-                    let ordinal = ordinal >> 1;
-                    next.prev = Some(ordinal);
-                    ordinal
-                };
+                let next_ordinal = node.next.expect("next");
+                let ordinal = next_ordinal >> 1;
 
-                let prev = Node {
-                    value,
+                let front = Node {
+                    value: RefCell::new(value),
                     prev: None,
-                    next: Some(new_ordinal),
+                    next: Some(ordinal),
                 };
 
-                self.list.insert(0, prev);
-                self.list.insert(new_ordinal, node);
-                self.tree.insert(new_ordinal);
+                self.inner.insert_unchecked(0, front);
+                self.inner.insert_unchecked(ordinal, node);
 
-                debug_assert!(self.is_valid());
+                let next = self.inner.get_mut(&next_ordinal);
+                next.prev = Some(ordinal);
+
+                debug_assert!(self.inner.is_valid());
             }
         }
     }
@@ -662,40 +656,8 @@ impl<T> List<T> {
                 Self::MAX_LEN
             }
         } else {
-            self.tree.ordinal(cardinal)
+            self.inner.ordinal(cardinal)
         }
-    }
-
-    fn is_valid(&self) -> bool {
-        assert_eq!(self.list.len(), self.tree.size());
-        assert!(self.len() <= Self::MAX_LEN);
-
-        if self.is_empty() {
-            return true;
-        } else if self.len() == 1 {
-            let node = self.list.get(&0).expect("head");
-            assert_eq!(node.prev, None);
-            assert_eq!(node.next, None);
-            return true;
-        }
-
-        let mut prev = None;
-        let mut ordinal = 0;
-        for cardinal in 0..self.len() {
-            assert_eq!(self.ordinal(cardinal), ordinal);
-
-            let node = self.list.get(&ordinal).expect("node");
-            assert_eq!(node.prev, prev);
-            prev = Some(ordinal);
-
-            if let Some(next) = node.next {
-                ordinal = next
-            } else {
-                assert_eq!(node.next, None);
-            }
-        }
-
-        true
     }
 }
 
@@ -705,7 +667,7 @@ impl<T: PartialEq> PartialEq for List<T> {
             return false;
         }
 
-        self.iter().zip(other.iter()).all(|(l, r)| l == r)
+        self.iter().zip(other.iter()).all(|(l, r)| *l == *r)
     }
 }
 
@@ -736,42 +698,6 @@ impl<T> FromIterator<T> for List<T> {
     }
 }
 
-impl<T> Index<usize> for List<T> {
-    type Output = T;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        assert_bounds!(index, self.len());
-
-        if index == 0 {
-            self.front().expect("first element")
-        } else if index == self.len() - 1 {
-            self.back().expect("last element")
-        } else {
-            let ordinal = self.ordinal(index);
-            self.list.get(&ordinal).map(Deref::deref).expect("element")
-        }
-    }
-}
-
-impl<T> IndexMut<usize> for List<T> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        assert_bounds!(index, self.len());
-
-        if index == 0 {
-            self.front_mut().expect("first element")
-        } else if index == self.len() - 1 {
-            self.back_mut().expect("last element")
-        } else {
-            let ordinal = self.ordinal(index);
-
-            self.list
-                .get_mut(&ordinal)
-                .map(DerefMut::deref_mut)
-                .expect("element")
-        }
-    }
-}
-
 impl<T> IntoIterator for List<T> {
     type Item = T;
     type IntoIter = IntoIter<T>;
@@ -786,7 +712,7 @@ impl<T> IntoIterator for List<T> {
         };
 
         IntoIter {
-            inner: self.list,
+            inner: self.inner.list,
             size,
             next,
             last,
@@ -795,7 +721,7 @@ impl<T> IntoIterator for List<T> {
 }
 
 impl<'a, T> IntoIterator for &'a List<T> {
-    type Item = &'a T;
+    type Item = Ref<'a, T>;
     type IntoIter = Iter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -833,7 +759,7 @@ mod tests {
 
             assert_eq!(list.len(), vector.len());
             for i in 0..vector.len() {
-                assert_eq!(vector[i], list[i]);
+                assert_eq!(vector[i], *list.get(i).expect("item"));
             }
         }
     }

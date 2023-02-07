@@ -37,6 +37,7 @@
 
 use core::fmt;
 use std::borrow::Borrow;
+use std::cell::Ref;
 use std::cmp::Ordering;
 use std::collections::HashSet as Inner;
 use std::hash::Hash;
@@ -74,7 +75,7 @@ pub struct Iter<'a, T> {
 }
 
 impl<'a, T> Iterator for Iter<'a, T> {
-    type Item = &'a Arc<T>;
+    type Item = Ref<'a, Arc<T>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
@@ -167,8 +168,8 @@ impl<T: Eq + Hash + Ord + fmt::Debug> LinkedHashSet<T> {
             if index == self.len() {
                 self.order.insert(index, value.clone());
             } else {
-                let prior = self.order.get(index).expect("value");
-                if prior < &value {
+                let prior = self.order.get(index).expect("value").clone();
+                if &prior < &value {
                     self.order.insert(index + 1, value.clone());
                 } else {
                     self.order.insert(index, value.clone());
@@ -244,8 +245,8 @@ impl<T: Eq + Hash + Ord + fmt::Debug> LinkedHashSet<T> {
         let mut value = self.order.get(0).expect("value");
         for i in 1..self.len() {
             let next = self.order.get(i).expect("next");
-            assert!(value <= next, "set out of order: {:?}", self);
-            assert!(next >= value);
+            assert!(*value <= *next, "set out of order: {:?}", self);
+            assert!(*next >= *value);
             value = next;
         }
 
@@ -291,7 +292,7 @@ impl<T> IntoIterator for LinkedHashSet<T> {
 }
 
 impl<'a, T: Hash + Ord + fmt::Debug> IntoIterator for &'a LinkedHashSet<T> {
-    type Item = &'a Arc<T>;
+    type Item = Ref<'a, Arc<T>>;
     type IntoIter = Iter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -306,13 +307,13 @@ where
     Q: Ord,
 {
     if let Some(front) = list.front() {
-        if target < front.borrow() {
+        if target < (*front).borrow() {
             return 0;
         }
     }
 
     if let Some(last) = list.back() {
-        if target > last.borrow() {
+        if target > (*last).borrow() {
             return list.len();
         }
     }
@@ -322,9 +323,9 @@ where
 
     while lo < hi {
         let mid = (lo + hi) >> 1;
-        let value = list.get(mid).expect("value").borrow();
+        let value = &*list.get(mid).expect("value");
 
-        match value.cmp(target) {
+        match value.borrow().cmp(target) {
             Ordering::Less => lo = mid + 1,
             Ordering::Greater => hi = mid,
             Ordering::Equal => return mid,
