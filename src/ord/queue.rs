@@ -1,5 +1,5 @@
-//! A hash map ordered by insertion which can be reordered with a `swap` function,
-//! suitable for use as a cache or priority queue (e.g. an LFU or LRU cache).
+//! A linked hash map ordered by insertion which can be reordered by swapping,
+//! useful as a simple priority queue (e.g. an LFU or LRU cache).
 //!
 //! Note: [`Queue`] is indexed by keys. For indexing by cardinal order, use a [`List`] instead.
 
@@ -189,7 +189,7 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         }
     }
 
-    /// Increase the given `key`'s priority and return `true` if present, otherwise `false`.
+    /// If `key` is present, increase its priority by one and return `true`.
     pub fn bump(&mut self, key: &K) -> bool {
         let item = if let Some(item) = self.list.get(key) {
             item
@@ -422,28 +422,6 @@ impl<K: Eq + Hash, V> Queue<K, V> {
         Some((key, value))
     }
 
-    /// Remove an entry from this [`Queue`] and return its value, if present.
-    pub fn remove<Q>(&mut self, key: &Q) -> Option<V>
-    where
-        Arc<K>: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
-    {
-        let item = self.list.remove(key)?;
-        Some(self.remove_inner(item))
-    }
-
-    /// Remove and return an entry from this [`Queue`], if present.
-    pub fn remove_entry<Q>(&mut self, key: &Q) -> Option<(K, V)>
-    where
-        K: fmt::Debug,
-        Arc<K>: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
-    {
-        let (key, item) = self.list.remove_entry(key)?;
-        let key = Arc::try_unwrap(key).expect("key");
-        Some((key, self.remove_inner(item)))
-    }
-
     fn remove_inner(&mut self, item: Item<K, V>) -> V {
         let mut item_state = item.state();
 
@@ -481,6 +459,70 @@ impl<K: Eq + Hash, V> Queue<K, V> {
 
         std::mem::drop(item_state);
         item.value
+    }
+
+    /// Remove an entry from this [`Queue`] and return its value, if present.
+    pub fn remove<Q>(&mut self, key: &Q) -> Option<V>
+    where
+        Arc<K>: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        let item = self.list.remove(key)?;
+        Some(self.remove_inner(item))
+    }
+
+    /// Remove and return an entry from this [`Queue`], if present.
+    pub fn remove_entry<Q>(&mut self, key: &Q) -> Option<(K, V)>
+    where
+        K: fmt::Debug,
+        Arc<K>: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        let (key, item) = self.list.remove_entry(key)?;
+        let key = Arc::try_unwrap(key).expect("key");
+        Some((key, self.remove_inner(item)))
+    }
+
+    /// Swap the position of two keys in this [`Queue`].
+    /// Returns `true` if both keys are present in the [`Queue`].
+    pub fn swap<Q>(&mut self, l: &Q, r: &Q) -> bool
+    where
+        Arc<K>: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        if l == r {
+            return self.contains_key(l) && self.contains_key(r);
+        }
+
+        let (l_key, l_item) = if let Some(entry) = self.list.get_key_value(l) {
+            entry
+        } else {
+            return false;
+        };
+
+        let (r_key, r_item) = if let Some(entry) = self.list.get_key_value(r) {
+            entry
+        } else {
+            return false;
+        };
+
+        let mut l_state = l_item.state();
+        let mut r_state = r_item.state();
+        mem::swap(&mut l_state, &mut r_state);
+
+        if self.head.as_ref() == Some(l_key) {
+            self.head = Some(r_key.clone());
+        } else if self.head.as_ref() == Some(r_key) {
+            self.head = Some(l_key.clone());
+        }
+
+        if self.tail.as_ref() == Some(l_key) {
+            self.tail = Some(r_key.clone());
+        } else if self.tail.as_ref() == Some(r_key) {
+            self.tail = Some(l_key.clone());
+        }
+
+        true
     }
 
     /// Construct an iterator over the values in this [`Queue`].
