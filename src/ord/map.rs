@@ -170,6 +170,15 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
         self.order.clear();
     }
 
+    /// Return `true` if there is an entry for the given `key` in this [`LinkedHashMap`].
+    pub fn contains_key<Q>(&self, key: &Q) -> bool
+    where
+        Arc<K>: Borrow<Q>,
+        Q: Eq + Hash + ?Sized,
+    {
+        self.inner.contains_key(key)
+    }
+
     /// Consume the `iter` and insert all its elements into this [`LinkedHashMap`].
     pub fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
         for (key, value) in iter {
@@ -219,6 +228,11 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> LinkedHashMap<K, V> {
             inner: &self.inner,
             order: self.order.iter(),
         }
+    }
+
+    /// Return `true` if this [`LinkedHashMap`] is empty.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
     }
 
     /// Construct an iterator over keys of this [`LinkedHashMap`].
@@ -312,5 +326,17 @@ impl<K: Eq + Hash + fmt::Debug, V> IntoIterator for LinkedHashMap<K, V> {
             inner: self.inner,
             order: self.order.into_iter(),
         }
+    }
+}
+
+impl<K: Eq + Hash + Ord + fmt::Debug, V: fmt::Debug> fmt::Debug for LinkedHashMap<K, V> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("{")?;
+
+        for (key, value) in self.iter() {
+            write!(f, "{:?}: {:?}, ", key, value)?;
+        }
+
+        f.write_str("}")
     }
 }
