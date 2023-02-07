@@ -30,8 +30,8 @@
 //! );
 //!
 //! assert_eq!(
-//!     set2.into_iter().map(|s| &**s).collect::<Vec<&str>>(),
-//!     ["a", "b", "c"]
+//!     set2.into_iter().rev().map(|s| &**s).collect::<Vec<&str>>(),
+//!     ["c", "b", "a"]
 //! );
 //! ```
 

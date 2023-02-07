@@ -166,7 +166,6 @@ impl<T> Inner<T> {
 
     fn swap(&mut self, from: &usize, to: &usize) {
         debug_assert!(self.is_valid());
-        debug_assert!(self.list.contains_key(to));
 
         match from.cmp(to) {
             Ordering::Less => {
@@ -542,70 +541,6 @@ impl<T> List<T> {
         self.inner.len()
     }
 
-    /// Iterate over the given `range` of elements in this [`List`].
-    pub fn range<R: RangeBounds<usize>>(&self, range: R) -> Iter<T> {
-        #[inline]
-        fn empty<T>(list: &HashMap<usize, Node<T>>) -> Iter<T> {
-            Iter {
-                inner: list,
-                size: 0,
-                next: None,
-                stop: None,
-            }
-        }
-
-        if self.is_empty() {
-            return empty(&self.inner.list);
-        }
-
-        let start = match range.start_bound() {
-            Bound::Included(start) => match self.len().cmp(start) {
-                Ordering::Less | Ordering::Equal => return empty(&self.inner.list),
-                Ordering::Greater => *start,
-            },
-            Bound::Excluded(start) => match self.len().cmp(start) {
-                Ordering::Less | Ordering::Equal => return empty(&self.inner.list),
-                Ordering::Greater => {
-                    if *start == self.len() - 1 {
-                        return empty(&self.inner.list);
-                    } else {
-                        start + 1
-                    }
-                }
-            },
-            _ => 0,
-        };
-
-        let end = match range.end_bound() {
-            Bound::Included(end) if end < &self.len() => *end,
-            Bound::Excluded(end) if end <= &self.len() => *end - 1,
-            _ => Self::MAX_LEN,
-        };
-
-        Iter {
-            inner: &self.inner.list,
-            size: (end - start) + 1,
-            next: Some(self.ordinal(start)),
-            stop: Some(self.ordinal(end)),
-        }
-    }
-
-    /// Remove and return the value at the given `index`, if any.
-    pub fn remove(&mut self, index: usize) -> Option<T> {
-        if index == 0 {
-            return self.pop_front();
-        } else if index == self.len() - 1 {
-            return self.pop_back();
-        } else if index >= self.len() {
-            return None;
-        }
-
-        let ordinal = self.ordinal(index);
-        let node = self.inner.remove(ordinal);
-
-        Some(node.value.into_inner())
-    }
-
     /// Remove and return the last value in this [`List`].
     pub fn pop_back(&mut self) -> Option<T> {
         let node = if self.is_empty() {
@@ -793,6 +728,87 @@ impl<T> List<T> {
                 self.inner.swap(&new_ordinal, &0);
             }
         }
+    }
+
+    /// Iterate over the given `range` of elements in this [`List`].
+    pub fn range<R: RangeBounds<usize>>(&self, range: R) -> Iter<T> {
+        #[inline]
+        fn empty<T>(list: &HashMap<usize, Node<T>>) -> Iter<T> {
+            Iter {
+                inner: list,
+                size: 0,
+                next: None,
+                stop: None,
+            }
+        }
+
+        if self.is_empty() {
+            return empty(&self.inner.list);
+        }
+
+        let start = match range.start_bound() {
+            Bound::Included(start) => match self.len().cmp(start) {
+                Ordering::Less | Ordering::Equal => return empty(&self.inner.list),
+                Ordering::Greater => *start,
+            },
+            Bound::Excluded(start) => match self.len().cmp(start) {
+                Ordering::Less | Ordering::Equal => return empty(&self.inner.list),
+                Ordering::Greater => {
+                    if *start == self.len() - 1 {
+                        return empty(&self.inner.list);
+                    } else {
+                        start + 1
+                    }
+                }
+            },
+            _ => 0,
+        };
+
+        let end = match range.end_bound() {
+            Bound::Included(end) if end < &self.len() => *end,
+            Bound::Excluded(end) if end <= &self.len() => *end - 1,
+            _ => Self::MAX_LEN,
+        };
+
+        Iter {
+            inner: &self.inner.list,
+            size: (end - start) + 1,
+            next: Some(self.ordinal(start)),
+            stop: Some(self.ordinal(end)),
+        }
+    }
+
+    /// Remove and return the value at the given `index`, if any.
+    pub fn remove(&mut self, index: usize) -> Option<T> {
+        if index == 0 {
+            return self.pop_front();
+        } else if index == self.len() - 1 {
+            return self.pop_back();
+        } else if index >= self.len() {
+            return None;
+        }
+
+        let ordinal = self.ordinal(index);
+        let node = self.inner.remove(ordinal);
+
+        Some(node.value.into_inner())
+    }
+
+    /// Swap the value at `from` with the value at `to`.
+    pub fn swap(&mut self, from: usize, to: usize) {
+        assert_bounds!(from, self.len());
+        assert_bounds!(to, self.len());
+
+        let from = self.ordinal(from);
+        let from = self.inner.get(&from);
+
+        let to = self.ordinal(to);
+        let to = self.inner.get(&to);
+
+        mem::swap(
+            from.value.borrow_mut().deref_mut(),
+            to.value.borrow_mut().deref_mut(),
+        );
     }
 
     fn ordinal(&self, cardinal: usize) -> usize {
