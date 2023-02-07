@@ -518,13 +518,17 @@ impl<T> List<T> {
 
     /// Iterate over all elements in this [`List`].
     pub fn iter(&self) -> Iter<T> {
-        let next = if self.is_empty() { None } else { Some(0) };
+        let (next, stop) = match self.len() {
+            0 => (None, None),
+            1 => (Some(0), Some(0)),
+            _ => (Some(0), Some(Self::MAX_LEN)),
+        };
 
         Iter {
             inner: &self.inner.list,
             size: self.len(),
             next,
-            stop: None,
+            stop,
         }
     }
 
@@ -557,7 +561,7 @@ impl<T> List<T> {
         let start = match range.start_bound() {
             Bound::Included(start) => match self.len().cmp(start) {
                 Ordering::Less | Ordering::Equal => return empty(&self.inner.list),
-                Ordering::Greater => Some(*start),
+                Ordering::Greater => *start,
             },
             Bound::Excluded(start) => match self.len().cmp(start) {
                 Ordering::Less | Ordering::Equal => return empty(&self.inner.list),
@@ -565,34 +569,24 @@ impl<T> List<T> {
                     if *start == self.len() - 1 {
                         return empty(&self.inner.list);
                     } else {
-                        Some(start + 1)
+                        start + 1
                     }
                 }
             },
-            _ => None,
+            _ => 0,
         };
 
         let end = match range.end_bound() {
-            Bound::Included(end) if end < &self.len() => Some(*end),
-            Bound::Excluded(end) if end <= &self.len() => Some(*end - 1),
-            _ => None,
+            Bound::Included(end) if end < &self.len() => *end,
+            Bound::Excluded(end) if end <= &self.len() => *end - 1,
+            _ => Self::MAX_LEN,
         };
-
-        let size = match (start, end) {
-            (Some(start), Some(end)) => (end - start) + 1,
-            (None, Some(end)) => end + 1,
-            (Some(start), None) => self.len() - start,
-            (None, None) => self.len(),
-        };
-
-        let next = start.map(|i| self.ordinal(i));
-        let stop = end.map(|i| self.ordinal(i));
 
         Iter {
             inner: &self.inner.list,
-            size,
-            next,
-            stop,
+            size: (end - start) + 1,
+            next: Some(self.ordinal(start)),
+            stop: Some(self.ordinal(end)),
         }
     }
 
