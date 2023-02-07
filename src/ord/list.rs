@@ -48,7 +48,8 @@
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::ops::{Bound, RangeBounds};
+use std::mem;
+use std::ops::{Bound, DerefMut, RangeBounds};
 
 use super::tree::Tree;
 
@@ -171,6 +172,50 @@ impl<T> Inner<T> {
         debug_assert!(self.is_valid());
 
         node
+    }
+
+    fn swap(&self, from: &usize, to: &usize) {
+        debug_assert!(self.is_valid());
+
+        match from.cmp(to) {
+            Ordering::Less => {
+                let mut node = self.get(from);
+                while let Some(next) = node.next.as_ref() {
+                    let next_node = self.get(next);
+
+                    mem::swap(
+                        node.value.borrow_mut().deref_mut(),
+                        next_node.value.borrow_mut().deref_mut(),
+                    );
+
+                    if next == to {
+                        break;
+                    } else {
+                        node = next_node;
+                    }
+                }
+            }
+            Ordering::Equal => {}
+            Ordering::Greater => {
+                let mut node = self.get(from);
+                while let Some(prev) = node.prev.as_ref() {
+                    let prev_node = self.get(prev);
+
+                    mem::swap(
+                        node.value.borrow_mut().deref_mut(),
+                        prev_node.value.borrow_mut().deref_mut(),
+                    );
+
+                    if prev == to {
+                        break;
+                    } else {
+                        node = prev_node;
+                    }
+                }
+            }
+        }
+
+        debug_assert!(self.is_valid());
     }
 
     fn is_valid(&self) -> bool {
@@ -561,30 +606,43 @@ impl<T> List<T> {
                 self.inner.insert(Self::MAX_LEN, node)
             }
             _ => {
-                // TODO: traverse back to find the lowest-density insertion point
-                // then swap the new value forward
+                // traverse back to find the lowest-density insertion point
+                let mut ordinal = Self::MAX_LEN;
+                let mut gap = 0;
 
-                let mut node = self.inner.remove(Self::MAX_LEN);
-                assert_eq!(node.next, None);
-                node.next = Some(Self::MAX_LEN);
+                loop {
+                    let node = self.inner.get(&ordinal);
 
-                let prev_ordinal = node.prev.expect("prev");
-                let ordinal = prev_ordinal + ((Self::MAX_LEN - prev_ordinal) >> 1);
+                    if let Some(prev) = node.prev {
+                        let prev_gap = ordinal - prev;
+                        debug_assert!(prev_gap > 2);
 
-                let back = Node {
-                    value: RefCell::new(value),
-                    prev: Some(ordinal),
-                    next: None,
-                };
-
-                {
-                    let prev = self.inner.get_mut(&prev_ordinal);
-                    prev.next = Some(ordinal);
+                        if prev_gap <= gap {
+                            break;
+                        } else {
+                            gap = prev_gap;
+                            ordinal = prev;
+                        }
+                    } else {
+                        break;
+                    }
                 }
 
-                self.inner.insert_unchecked(ordinal, node);
-                self.inner.insert_unchecked(Self::MAX_LEN, back);
-                debug_assert!(self.inner.is_valid());
+                debug_assert!(gap > 0);
+                debug_assert!(ordinal > gap);
+
+                // then insert the new value
+                let new_ordinal = ordinal - (gap >> 1);
+                let new_node = Node {
+                    value: RefCell::new(value),
+                    prev: Some(ordinal - gap),
+                    next: Some(ordinal),
+                };
+
+                self.inner.insert(new_ordinal, new_node);
+
+                // and swap it forward
+                self.inner.swap(&new_ordinal, &Self::MAX_LEN);
             }
         }
     }
