@@ -164,6 +164,96 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
         }
     }
 
+    fn bisect_hi<Cmp>(&self, cmp: Cmp) -> usize
+    where
+        Cmp: Fn(&T) -> Option<Ordering>,
+    {
+        if self.is_empty() {
+            return 0;
+        } else if cmp(self.order.back().expect("tail")).is_some() {
+            return self.len();
+        }
+
+        let mut lo = 0;
+        let mut hi = 1;
+
+        while lo < hi {
+            let mid = (lo + hi) >> 1;
+            let value = self.order.get(mid).expect("value");
+
+            if cmp(&**value).is_some() {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+
+        hi
+    }
+
+    fn bisect_lo<Cmp>(&self, cmp: Cmp) -> usize
+    where
+        Cmp: Fn(&T) -> Option<Ordering>,
+    {
+        if self.is_empty() {
+            return 0;
+        } else if cmp(self.order.front().expect("head")).is_some() {
+            return 0;
+        }
+
+        let mut lo = 0;
+        let mut hi = 1;
+
+        while lo < hi {
+            let mid = (lo + hi) >> 1;
+            let value = self.order.get(mid).expect("value");
+
+            if cmp(&**value).is_some() {
+                hi = mid;
+            } else {
+                lo = mid + 1;
+            }
+        }
+
+        hi
+    }
+
+    fn bisect_inner<Cmp>(&self, cmp: Cmp, mut lo: usize, mut hi: usize) -> Option<&T>
+    where
+        Cmp: Fn(&T) -> Option<Ordering>,
+    {
+        while lo < hi {
+            let mid = (lo + hi) >> 1;
+            let key = self.order.get(mid).expect("key");
+
+            if let Some(order) = cmp(&**key) {
+                match order {
+                    Ordering::Less => hi = mid,
+                    Ordering::Equal => return Some(key),
+                    Ordering::Greater => lo = mid + 1,
+                }
+            } else {
+                panic!("comparison does not match key distribution")
+            }
+        }
+
+        None
+    }
+
+    /// Bisect this set to match a key using the provided comparison, and return its value (if any).
+    ///
+    /// The first key for which the comparison returns `Some(Ordering::Equal)` will be returned.
+    /// This method assumes that any partially-ordered keys (where `cmp(key).is_none()`) lie at the
+    /// beginning and/or end of the distribution.
+    pub fn bisect<Cmp>(&self, cmp: Cmp) -> Option<&T>
+    where
+        Cmp: Fn(&T) -> Option<Ordering> + Copy,
+    {
+        let lo = self.bisect_lo(cmp);
+        let hi = self.bisect_hi(cmp);
+        self.bisect_inner(cmp, lo, hi)
+    }
+
     /// Remove all values from this [`OrdHashSet`].
     pub fn clear(&mut self) {
         self.inner.clear();
@@ -218,11 +308,6 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
         Iter {
             inner: self.order.iter(),
         }
-    }
-
-    /// Return the value at index `n`, if any.
-    pub fn nth(&self, index: usize) -> Option<&Arc<T>> {
-        self.order.get(index)
     }
 
     /// Remove and return the first value in this [`OrdHashSet`].

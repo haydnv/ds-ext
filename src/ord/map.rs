@@ -200,70 +200,6 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
         }
     }
 
-    fn bisect_hi<Cmp>(&self, cmp: Cmp) -> usize
-    where
-        Cmp: Fn(&K) -> Option<Ordering>,
-    {
-        let mut lo = 0;
-        let mut hi = 1;
-
-        while lo < hi {
-            let mid = (lo + hi) >> 1;
-            let key = self.order.nth(mid).expect("key");
-
-            if cmp(&**key).is_some() {
-                lo = mid + 1;
-            } else {
-                hi = mid;
-            }
-        }
-
-        hi
-    }
-
-    fn bisect_lo<Cmp>(&self, cmp: Cmp) -> usize
-    where
-        Cmp: Fn(&K) -> Option<Ordering>,
-    {
-        let mut lo = 0;
-        let mut hi = 1;
-
-        while lo < hi {
-            let mid = (lo + hi) >> 1;
-            let key = self.order.nth(mid).expect("key");
-
-            if cmp(&***key).is_some() {
-                hi = mid;
-            } else {
-                lo = mid + 1;
-            }
-        }
-
-        hi
-    }
-
-    fn bisect_inner<Cmp>(&self, cmp: Cmp, mut lo: usize, mut hi: usize) -> Option<Arc<Arc<K>>>
-    where
-        Cmp: Fn(&K) -> Option<Ordering>,
-    {
-        while lo < hi {
-            let mid = (lo + hi) >> 1;
-            let key = self.order.nth(mid).expect("key");
-
-            if let Some(order) = cmp(&**key) {
-                match order {
-                    Ordering::Less => hi = mid,
-                    Ordering::Equal => return Some(key.clone()),
-                    Ordering::Greater => lo = mid + 1,
-                }
-            } else {
-                panic!("comparison does not match key distribution")
-            }
-        }
-
-        None
-    }
-
     /// Bisect this map to match a key using the provided comparison, and return its value (if any).
     ///
     /// The first key for which the comparison returns `Some(Ordering::Equal)` will be returned.
@@ -273,10 +209,9 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
     where
         Cmp: Fn(&K) -> Option<Ordering> + Copy,
     {
-        let lo = self.bisect_lo(cmp);
-        let hi = self.bisect_hi(cmp);
-        let key = self.bisect_inner(cmp, lo, hi);
-        key.map(|key| self.get(&**key).expect("value"))
+        self.order
+            .bisect(|key| cmp(&*key))
+            .map(|key| self.get(&**key).expect("value"))
     }
 
     /// Remove all entries from this [`OrdHashMap`].
