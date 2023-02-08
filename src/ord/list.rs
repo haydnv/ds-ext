@@ -45,12 +45,11 @@
 //! assert_eq!(list.into_iter().collect::<Vec<_>>(), ["zero", "one", "two", "three"]);
 //! ```
 
-use std::cell::{Ref, RefCell, RefMut};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
 use std::mem;
-use std::ops::{Bound, DerefMut, RangeBounds};
+use std::ops::{Bound, RangeBounds};
 
 use super::tree::Tree;
 
@@ -67,24 +66,20 @@ macro_rules! assert_bounds {
 
 #[derive(Clone, Debug)]
 struct Node<T> {
-    value: RefCell<T>,
+    value: T,
     prev: Option<usize>,
     next: Option<usize>,
 }
 
 impl<T> Node<T> {
     fn new(value: T, prev: Option<usize>, next: Option<usize>) -> Self {
-        Self {
-            value: RefCell::new(value),
-            prev,
-            next,
-        }
+        Self { value, prev, next }
     }
 }
 
 impl<T: fmt::Debug> Node<T> {
     fn into_value(self) -> T {
-        self.value.into_inner()
+        self.value
     }
 }
 
@@ -118,12 +113,12 @@ impl<T> Inner<T> {
         self.list.get(ordinal).expect("node")
     }
 
-    fn get_value(&self, ordinal: &usize) -> Option<Ref<T>> {
-        self.list.get(ordinal).map(|node| node.value.borrow())
+    fn get_value(&self, ordinal: &usize) -> Option<&T> {
+        self.list.get(ordinal).map(|node| &node.value)
     }
 
-    fn get_value_mut(&mut self, ordinal: &usize) -> Option<RefMut<T>> {
-        self.list.get(ordinal).map(|node| node.value.borrow_mut())
+    fn get_value_mut(&mut self, ordinal: &usize) -> Option<&mut T> {
+        self.list.get_mut(ordinal).map(|node| &mut node.value)
     }
 
     fn insert(&mut self, ordinal: usize, node: Node<T>) {
@@ -181,46 +176,52 @@ impl<T> Inner<T> {
         node
     }
 
-    fn swap(&mut self, from: &usize, to: &usize) {
+    fn swap(&mut self, from: usize, to: usize) {
         debug_assert!(self.is_valid());
 
-        match from.cmp(to) {
+        match from.cmp(&to) {
             Ordering::Less => {
-                let mut node = self.get(from);
-                while let Some(next) = node.next.as_ref() {
-                    debug_assert!(next > from);
+                let mut ordinal = Some(from);
+                while let Some(this) = ordinal {
+                    let mut node = self.list.remove(&this).expect("node");
+                    ordinal = node.next;
 
-                    let next_node = self.get(next);
+                    if let Some(next_ordinal) = node.next {
+                        let mut next_node = self.list.remove(&next_ordinal).expect("next");
 
-                    mem::swap(
-                        node.value.borrow_mut().deref_mut(),
-                        next_node.value.borrow_mut().deref_mut(),
-                    );
+                        mem::swap(&mut node.value, &mut next_node.value);
 
-                    if next == to {
-                        break;
+                        self.list.insert(this, node);
+                        self.list.insert(next_ordinal, next_node);
+
+                        if next_ordinal == to {
+                            break;
+                        }
                     } else {
-                        node = next_node;
+                        self.list.insert(this, node);
                     }
                 }
             }
             Ordering::Equal => {}
             Ordering::Greater => {
-                let mut node = self.get(from);
-                while let Some(prev) = node.prev.as_ref() {
-                    debug_assert!(prev < from);
+                let mut ordinal = Some(from);
+                while let Some(this) = ordinal {
+                    let mut node = self.list.remove(&this).expect("node");
+                    ordinal = node.prev;
 
-                    let prev_node = self.get(prev);
+                    if let Some(prev_ordinal) = node.prev {
+                        let mut prev_node = self.list.remove(&prev_ordinal).expect("prev");
 
-                    mem::swap(
-                        node.value.borrow_mut().deref_mut(),
-                        prev_node.value.borrow_mut().deref_mut(),
-                    );
+                        mem::swap(&mut node.value, &mut prev_node.value);
 
-                    if prev == to {
-                        break;
+                        self.list.insert(this, node);
+                        self.list.insert(prev_ordinal, prev_node);
+
+                        if prev_ordinal == from {
+                            break;
+                        }
                     } else {
-                        node = prev_node;
+                        self.list.insert(this, node);
                     }
                 }
             }
@@ -321,7 +322,7 @@ pub struct Iter<'a, T> {
 }
 
 impl<'a, T: fmt::Debug> Iterator for Iter<'a, T> {
-    type Item = Ref<'a, T>;
+    type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
         let ordinal = self.next?;
@@ -339,7 +340,7 @@ impl<'a, T: fmt::Debug> Iterator for Iter<'a, T> {
             self.size -= 1;
         }
 
-        Some(node.value.borrow())
+        Some(&node.value)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -364,7 +365,7 @@ impl<'a, T: fmt::Debug> DoubleEndedIterator for Iter<'a, T> {
             self.next = None;
         }
 
-        Some(node.value.borrow())
+        Some(&node.value)
     }
 }
 
@@ -392,13 +393,13 @@ impl<T: fmt::Debug> List<T> {
     }
 
     /// Borrow the last element in this [`List`], if any.
-    pub fn back(&self) -> Option<Ref<T>> {
+    pub fn back(&self) -> Option<&T> {
         let ordinal = if self.len() <= 1 { 0 } else { Self::MAX_LEN };
         self.inner.get_value(&ordinal)
     }
 
     /// Borrow the last element in this [`List`], if any.
-    pub fn back_mut(&mut self) -> Option<RefMut<T>> {
+    pub fn back_mut(&mut self) -> Option<&mut T> {
         let ordinal = if self.len() <= 1 { 0 } else { Self::MAX_LEN };
         self.inner.get_value_mut(&ordinal)
     }
@@ -409,17 +410,17 @@ impl<T: fmt::Debug> List<T> {
     }
 
     /// Borrow the first element in this [`List`], if any.
-    pub fn front(&self) -> Option<Ref<T>> {
+    pub fn front(&self) -> Option<&T> {
         self.inner.get_value(&0)
     }
 
     /// Borrow the last element in this [`List`], if any.
-    pub fn front_mut(&mut self) -> Option<RefMut<T>> {
+    pub fn front_mut(&mut self) -> Option<&mut T> {
         self.inner.get_value_mut(&0)
     }
 
     /// Borrow the element at the given `index`, if any.
-    pub fn get(&self, index: usize) -> Option<Ref<T>> {
+    pub fn get(&self, index: usize) -> Option<&T> {
         if index == 0 {
             self.front()
         } else if index == (self.len() - 1) {
@@ -433,7 +434,7 @@ impl<T: fmt::Debug> List<T> {
     }
 
     /// Borrow the element at the given `index` mutably, if any.
-    pub fn get_mut(&mut self, index: usize) -> Option<RefMut<T>> {
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
         if index == 0 {
             self.front_mut()
         } else if index == (self.len() - 1) {
@@ -512,7 +513,7 @@ impl<T: fmt::Debug> List<T> {
                     if next == ordinal {
                         // done
                     } else {
-                        self.inner.swap(&ordinal, &new_ordinal);
+                        self.inner.swap(ordinal, new_ordinal);
                     }
                 }
             },
@@ -597,7 +598,7 @@ impl<T: fmt::Debug> List<T> {
                 let new_node = Node::new(value, Some(0), Some(Self::MAX_LEN));
 
                 self.inner.insert(new_ordinal, new_node);
-                self.inner.swap(&new_ordinal, &Self::MAX_LEN);
+                self.inner.swap(new_ordinal, Self::MAX_LEN);
             }
             _ => {
                 // traverse back to find the lowest-density insertion point
@@ -635,7 +636,7 @@ impl<T: fmt::Debug> List<T> {
                 self.inner.insert(new_ordinal, new_node);
 
                 // and swap it forward
-                self.inner.swap(&new_ordinal, &Self::MAX_LEN);
+                self.inner.swap(new_ordinal, Self::MAX_LEN);
             }
         }
     }
@@ -650,13 +651,13 @@ impl<T: fmt::Debug> List<T> {
             1 => {
                 let node = Node::new(value, Some(0), None);
                 self.inner.insert(Self::MAX_LEN, node);
-                self.inner.swap(&0, &Self::MAX_LEN);
+                self.inner.swap(0, Self::MAX_LEN);
             }
             2 => {
                 let new_ordinal = Self::MAX_LEN >> 1;
                 let new_node = Node::new(value, Some(0), Some(Self::MAX_LEN));
                 self.inner.insert(new_ordinal, new_node);
-                self.inner.swap(&new_ordinal, &0);
+                self.inner.swap(new_ordinal, 0);
             }
             _ => {
                 debug_assert!(self.inner.is_valid());
@@ -697,7 +698,7 @@ impl<T: fmt::Debug> List<T> {
                 self.inner.insert(new_ordinal, new_node);
 
                 // and swap it backward
-                self.inner.swap(&new_ordinal, &0);
+                self.inner.swap(new_ordinal, 0);
             }
         }
     }
@@ -772,15 +773,17 @@ impl<T: fmt::Debug> List<T> {
         assert_bounds!(to, self.len());
 
         let from = self.ordinal(from);
-        let from = self.inner.get(&from);
+        let mut from_node = self.inner.list.remove(&from).expect("from");
 
         let to = self.ordinal(to);
-        let to = self.inner.get(&to);
+        let mut to_node = self.inner.list.remove(&to).expect("to");
 
-        mem::swap(
-            from.value.borrow_mut().deref_mut(),
-            to.value.borrow_mut().deref_mut(),
-        );
+        mem::swap(&mut from_node.value, &mut to_node.value);
+
+        self.inner.list.insert(from, from_node);
+        self.inner.list.insert(to, to_node);
+
+        debug_assert!(self.inner.is_valid());
     }
 
     fn ordinal(&self, cardinal: usize) -> usize {
@@ -860,7 +863,7 @@ impl<T: fmt::Debug> IntoIterator for List<T> {
 }
 
 impl<'a, T: fmt::Debug> IntoIterator for &'a List<T> {
-    type Item = Ref<'a, T>;
+    type Item = &'a T;
     type IntoIter = Iter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {

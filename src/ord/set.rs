@@ -37,7 +37,6 @@
 
 use core::fmt;
 use std::borrow::Borrow;
-use std::cell::Ref;
 use std::cmp::Ordering;
 use std::collections::HashSet as Inner;
 use std::hash::Hash;
@@ -75,7 +74,7 @@ pub struct Iter<'a, T> {
 }
 
 impl<'a, T: fmt::Debug> Iterator for Iter<'a, T> {
-    type Item = Ref<'a, Arc<T>>;
+    type Item = &'a Arc<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
@@ -192,7 +191,7 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
     }
 
     /// Return the value at index `n`, if any.
-    pub fn nth(&self, index: usize) -> Option<Ref<Arc<T>>> {
+    pub fn nth(&self, index: usize) -> Option<&Arc<T>> {
         self.order.get(index)
     }
 
@@ -297,7 +296,7 @@ impl<T: fmt::Debug> IntoIterator for OrdHashSet<T> {
 }
 
 impl<'a, T: Hash + Ord + fmt::Debug> IntoIterator for &'a OrdHashSet<T> {
-    type Item = Ref<'a, Arc<T>>;
+    type Item = &'a Arc<T>;
     type IntoIter = Iter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
