@@ -257,7 +257,63 @@ impl<T> Inner<T> {
     }
 }
 
-/// An iterator over the elements of a [`List`]
+/// An iterator to drain the contents of a [`List`]
+pub struct Drain<'a, T> {
+    inner: &'a mut HashMap<usize, Node<T>>,
+    size: usize,
+    next: Option<usize>,
+    last: Option<usize>,
+}
+
+impl<'a, T: fmt::Debug> Iterator for Drain<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let ordinal = self.next?;
+        let node = self.inner.remove(&ordinal).expect("node");
+
+        self.size -= 1;
+
+        self.next = if self.last == Some(ordinal) {
+            None
+        } else {
+            node.next
+        };
+
+        if self.next.is_none() {
+            self.last = None;
+        }
+
+        Some(node.into_value())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.size, Some(self.size))
+    }
+}
+
+impl<'a, T: fmt::Debug> DoubleEndedIterator for Drain<'a, T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let ordinal = self.last?;
+        let node = self.inner.remove(&ordinal).expect("node");
+
+        self.size -= 1;
+
+        self.last = if self.next == Some(ordinal) {
+            None
+        } else {
+            node.prev
+        };
+
+        if self.last.is_none() {
+            self.next = None;
+        }
+
+        Some(node.into_value())
+    }
+}
+
+/// An iterator over the contents of a [`List`]
 pub struct IntoIter<T> {
     inner: HashMap<usize, Node<T>>,
     size: usize,
@@ -407,6 +463,24 @@ impl<T: fmt::Debug> List<T> {
     /// Remove all elements from this [`List`].
     pub fn clear(&mut self) {
         self.inner.clear()
+    }
+
+    /// Drain all elements from this [`List`].
+    pub fn drain(&mut self) -> Drain<T> {
+        let next = if self.is_empty() { None } else { Some(0) };
+        let size = self.len();
+        let last = if self.len() == 1 {
+            Some(0)
+        } else {
+            Some(Self::MAX_LEN)
+        };
+
+        Drain {
+            inner: &mut self.inner.list,
+            size,
+            next,
+            last,
+        }
     }
 
     /// Borrow the first element in this [`List`], if any.

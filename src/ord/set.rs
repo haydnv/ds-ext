@@ -45,6 +45,29 @@ use std::sync::Arc;
 
 use super::list::List;
 
+/// An iterator to drain the contents of a [`OrdHashSet`]
+pub struct Drain<'a, T> {
+    inner: super::list::Drain<'a, Arc<T>>,
+}
+
+impl<'a, T: fmt::Debug> Iterator for Drain<'a, T> {
+    type Item = Arc<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl<'a, T: fmt::Debug> DoubleEndedIterator for Drain<'a, T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.inner.next_back()
+    }
+}
+
 /// An iterator over the contents of a [`OrdHashSet`]
 pub struct IntoIter<T> {
     inner: super::list::IntoIter<Arc<T>>,
@@ -141,10 +164,17 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
         }
     }
 
-    /// Remove all values from this [`OrdHashSet`]
+    /// Remove all values from this [`OrdHashSet`].
     pub fn clear(&mut self) {
         self.inner.clear();
         self.order.clear();
+    }
+
+    /// Drain all values from this [`OrdHashSet`].
+    pub fn drain(&mut self) -> Drain<T> {
+        Drain {
+            inner: self.order.drain(),
+        }
     }
 
     /// Consume the given `iter` and insert all its values into this [`OrdHashSet`]

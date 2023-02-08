@@ -9,7 +9,42 @@ use std::sync::Arc;
 
 use super::set::OrdHashSet;
 
-/// An iterator over the contents of a [`OrdHashMap`]
+/// An iterator to drain the contents of an [`OrdHashMap`]
+pub struct Drain<'a, K, V> {
+    inner: &'a mut Inner<Arc<K>, V>,
+    order: super::set::Drain<'a, Arc<K>>,
+}
+
+impl<'a, K: Eq + Hash + fmt::Debug, V> Drain<'a, K, V> {
+    fn next_entry(&mut self, key: Arc<Arc<K>>) -> Option<(K, V)> {
+        let value = self.inner.remove(&**key).expect("value");
+        let key = Arc::try_unwrap(key).expect("key");
+        let key = Arc::try_unwrap(key).expect("key");
+        Some((key, value))
+    }
+}
+
+impl<'a, K: Eq + Hash + fmt::Debug, V> Iterator for Drain<'a, K, V> {
+    type Item = (K, V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let key = self.order.next()?;
+        self.next_entry(key)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.order.size_hint()
+    }
+}
+
+impl<'a, K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for Drain<'a, K, V> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let key = self.order.next_back()?;
+        self.next_entry(key)
+    }
+}
+
+/// An iterator over the contents of an [`OrdHashMap`]
 pub struct IntoIter<K, V> {
     inner: Inner<Arc<K>, V>,
     order: super::set::IntoIter<Arc<K>>,
@@ -44,7 +79,7 @@ impl<K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for IntoIter<K, V> {
     }
 }
 
-/// An iterator over the entries in a [`OrdHashMap`]
+/// An iterator over the entries in an [`OrdHashMap`]
 pub struct Iter<'a, K, V> {
     inner: &'a Inner<Arc<K>, V>,
     order: super::set::Iter<'a, Arc<K>>,
@@ -72,7 +107,7 @@ impl<'a, K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for Iter<'a, K, V> {
     }
 }
 
-/// An iterator over the keys in a [`OrdHashMap`]
+/// An iterator over the keys in an [`OrdHashMap`]
 pub struct Keys<'a, K, V> {
     inner: &'a HashMap<Arc<K>, V>,
     order: super::set::Iter<'a, Arc<K>>,
@@ -100,7 +135,7 @@ impl<'a, K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for Keys<'a, K, V> {
     }
 }
 
-/// An iterator over the values in a [`OrdHashMap`]
+/// An iterator over the values in an [`OrdHashMap`]
 pub struct Values<'a, K, V> {
     inner: &'a Inner<Arc<K>, V>,
     order: super::set::Iter<'a, Arc<K>>,
@@ -248,6 +283,14 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
     pub fn clear(&mut self) {
         self.inner.clear();
         self.order.clear();
+    }
+
+    /// Drain all entries from this [`OrdHashMap`].
+    pub fn drain(&mut self) -> Drain<K, V> {
+        Drain {
+            inner: &mut self.inner,
+            order: self.order.drain(),
+        }
     }
 
     /// Return `true` if there is an entry for the given `key` in this [`OrdHashMap`].
