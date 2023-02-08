@@ -1,6 +1,7 @@
 //! A hash map ordered by key using a linked hash set
 
 use std::borrow::Borrow;
+use std::cmp::Ordering;
 use std::collections::{HashMap as Inner, HashMap};
 use std::fmt;
 use std::hash::Hash;
@@ -49,7 +50,7 @@ pub struct Iter<'a, K, V> {
     order: super::set::Iter<'a, Arc<K>>,
 }
 
-impl<'a, K: Eq + Hash, V> Iterator for Iter<'a, K, V> {
+impl<'a, K: Eq + Hash + fmt::Debug, V> Iterator for Iter<'a, K, V> {
     type Item = (&'a K, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -63,7 +64,7 @@ impl<'a, K: Eq + Hash, V> Iterator for Iter<'a, K, V> {
     }
 }
 
-impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Iter<'a, K, V> {
+impl<'a, K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for Iter<'a, K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         let key = self.order.next_back()?;
         let (key, value) = self.inner.get_key_value(&**key).expect("entry");
@@ -77,7 +78,7 @@ pub struct Keys<'a, K, V> {
     order: super::set::Iter<'a, Arc<K>>,
 }
 
-impl<'a, K: Eq + Hash, V> Iterator for Keys<'a, K, V> {
+impl<'a, K: Eq + Hash + fmt::Debug, V> Iterator for Keys<'a, K, V> {
     type Item = &'a K;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -91,7 +92,7 @@ impl<'a, K: Eq + Hash, V> Iterator for Keys<'a, K, V> {
     }
 }
 
-impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Keys<'a, K, V> {
+impl<'a, K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for Keys<'a, K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         let key = self.order.next_back()?;
         let (key, _) = self.inner.get_key_value(&***key).expect("entry");
@@ -105,7 +106,7 @@ pub struct Values<'a, K, V> {
     order: super::set::Iter<'a, Arc<K>>,
 }
 
-impl<'a, K: Eq + Hash, V> Iterator for Values<'a, K, V> {
+impl<'a, K: Eq + Hash + fmt::Debug, V> Iterator for Values<'a, K, V> {
     type Item = &'a V;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -118,7 +119,7 @@ impl<'a, K: Eq + Hash, V> Iterator for Values<'a, K, V> {
     }
 }
 
-impl<'a, K: Eq + Hash, V> DoubleEndedIterator for Values<'a, K, V> {
+impl<'a, K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for Values<'a, K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         let key = self.order.next_back()?;
         self.inner.get(&**key)
@@ -162,6 +163,85 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
             inner: Inner::with_capacity(capacity),
             order: OrdHashSet::with_capacity(capacity),
         }
+    }
+
+    fn bisect_hi<Cmp>(&self, cmp: Cmp) -> usize
+    where
+        Cmp: Fn(&K) -> Option<Ordering>,
+    {
+        let mut lo = 0;
+        let mut hi = 1;
+
+        while lo < hi {
+            let mid = (lo + hi) >> 1;
+            let key = self.order.nth(mid).expect("key");
+
+            if cmp(&**key).is_some() {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+
+        hi
+    }
+
+    fn bisect_lo<Cmp>(&self, cmp: Cmp) -> usize
+    where
+        Cmp: Fn(&K) -> Option<Ordering>,
+    {
+        let mut lo = 0;
+        let mut hi = 1;
+
+        while lo < hi {
+            let mid = (lo + hi) >> 1;
+            let key = self.order.nth(mid).expect("key");
+
+            if cmp(&***key).is_some() {
+                hi = mid;
+            } else {
+                lo = mid + 1;
+            }
+        }
+
+        hi
+    }
+
+    fn bisect_inner<Cmp>(&self, cmp: Cmp, mut lo: usize, mut hi: usize) -> Option<Arc<Arc<K>>>
+    where
+        Cmp: Fn(&K) -> Option<Ordering>,
+    {
+        while lo < hi {
+            let mid = (lo + hi) >> 1;
+            let key = self.order.nth(mid).expect("key");
+
+            if let Some(order) = cmp(&**key) {
+                match order {
+                    Ordering::Less => hi = mid,
+                    Ordering::Equal => return Some(key.clone()),
+                    Ordering::Greater => lo = mid + 1,
+                }
+            } else {
+                panic!("comparison does not match key distribution")
+            }
+        }
+
+        None
+    }
+
+    /// Bisect this map to match a key using the provided comparison, and return its value (if any).
+    ///
+    /// The first key for which the comparison returns `Some(Ordering::Equal)` will be returned.
+    /// This method assumes that any partially-ordered keys (where `cmp(key).is_none()`) lie at the
+    /// beginning and/or end of the distribution.
+    pub fn bisect<Cmp>(&self, cmp: Cmp) -> Option<&V>
+    where
+        Cmp: Fn(&K) -> Option<Ordering> + Copy,
+    {
+        let lo = self.bisect_lo(cmp);
+        let hi = self.bisect_hi(cmp);
+        let key = self.bisect_inner(cmp, lo, hi);
+        key.map(|key| self.get(&**key).expect("value"))
     }
 
     /// Remove all entries from this [`OrdHashMap`].
