@@ -51,7 +51,7 @@ pub struct IntoIter<T> {
     inner: super::list::IntoIter<Arc<T>>,
 }
 
-impl<T> Iterator for IntoIter<T> {
+impl<T: fmt::Debug> Iterator for IntoIter<T> {
     type Item = Arc<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -63,7 +63,7 @@ impl<T> Iterator for IntoIter<T> {
     }
 }
 
-impl<T> DoubleEndedIterator for IntoIter<T> {
+impl<T: fmt::Debug> DoubleEndedIterator for IntoIter<T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner.next_back()
     }
@@ -74,7 +74,7 @@ pub struct Iter<'a, T> {
     inner: super::list::Iter<'a, Arc<T>>,
 }
 
-impl<'a, T> Iterator for Iter<'a, T> {
+impl<'a, T: fmt::Debug> Iterator for Iter<'a, T> {
     type Item = Ref<'a, Arc<T>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -86,7 +86,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
     }
 }
 
-impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
+impl<'a, T: fmt::Debug> DoubleEndedIterator for Iter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner.next_back()
     }
@@ -109,13 +109,13 @@ impl<T> Clone for OrdHashSet<T> {
     }
 }
 
-impl<T: PartialEq> PartialEq for OrdHashSet<T> {
+impl<T: PartialEq + fmt::Debug> PartialEq for OrdHashSet<T> {
     fn eq(&self, other: &Self) -> bool {
         self.order == other.order
     }
 }
 
-impl<T: Eq> Eq for OrdHashSet<T> {}
+impl<T: Eq + fmt::Debug> Eq for OrdHashSet<T> {}
 
 impl<T> Deref for OrdHashSet<T> {
     type Target = Inner<Arc<T>>;
@@ -189,6 +189,11 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
         Iter {
             inner: self.order.iter(),
         }
+    }
+
+    /// Return the value at index `n`, if any.
+    pub fn nth(&self, index: usize) -> Option<Ref<Arc<T>>> {
+        self.order.get(index)
     }
 
     /// Remove and return the first value in this [`OrdHashSet`].
@@ -280,7 +285,7 @@ impl<T: Eq + Hash + Ord + fmt::Debug> FromIterator<T> for OrdHashSet<T> {
     }
 }
 
-impl<T> IntoIterator for OrdHashSet<T> {
+impl<T: fmt::Debug> IntoIterator for OrdHashSet<T> {
     type Item = Arc<T>;
     type IntoIter = IntoIter<T>;
 
@@ -303,7 +308,7 @@ impl<'a, T: Hash + Ord + fmt::Debug> IntoIterator for &'a OrdHashSet<T> {
 #[inline]
 fn bisect<T, Q>(list: &List<T>, target: &Q) -> usize
 where
-    T: Borrow<Q> + Ord,
+    T: Borrow<Q> + Ord + fmt::Debug,
     Q: Ord,
 {
     if let Some(front) = list.front() {

@@ -48,6 +48,7 @@
 use std::cell::{Ref, RefCell, RefMut};
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fmt;
 use std::mem;
 use std::ops::{Bound, DerefMut, RangeBounds};
 
@@ -69,6 +70,22 @@ struct Node<T> {
     value: RefCell<T>,
     prev: Option<usize>,
     next: Option<usize>,
+}
+
+impl<T> Node<T> {
+    fn new(value: T, prev: Option<usize>, next: Option<usize>) -> Self {
+        Self {
+            value: RefCell::new(value),
+            prev,
+            next,
+        }
+    }
+}
+
+impl<T: fmt::Debug> Node<T> {
+    fn into_value(self) -> T {
+        self.value.into_inner()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -247,7 +264,7 @@ pub struct IntoIter<T> {
     last: Option<usize>,
 }
 
-impl<T> Iterator for IntoIter<T> {
+impl<T: fmt::Debug> Iterator for IntoIter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -266,7 +283,7 @@ impl<T> Iterator for IntoIter<T> {
             self.last = None;
         }
 
-        Some(node.value.into_inner())
+        Some(node.into_value())
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -274,7 +291,7 @@ impl<T> Iterator for IntoIter<T> {
     }
 }
 
-impl<T> DoubleEndedIterator for IntoIter<T> {
+impl<T: fmt::Debug> DoubleEndedIterator for IntoIter<T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         let ordinal = self.last?;
         let node = self.inner.remove(&ordinal).expect("node");
@@ -291,7 +308,7 @@ impl<T> DoubleEndedIterator for IntoIter<T> {
             self.next = None;
         }
 
-        Some(node.value.into_inner())
+        Some(node.into_value())
     }
 }
 
@@ -303,7 +320,7 @@ pub struct Iter<'a, T> {
     stop: Option<usize>,
 }
 
-impl<'a, T> Iterator for Iter<'a, T> {
+impl<'a, T: fmt::Debug> Iterator for Iter<'a, T> {
     type Item = Ref<'a, T>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -330,7 +347,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
     }
 }
 
-impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
+impl<'a, T: fmt::Debug> DoubleEndedIterator for Iter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         let ordinal = self.stop?;
         let node = self.inner.get(&ordinal).expect("next");
@@ -357,7 +374,7 @@ pub struct List<T> {
     inner: Inner<T>,
 }
 
-impl<T> List<T> {
+impl<T: fmt::Debug> List<T> {
     const MAX_LEN: usize = usize::MAX;
 
     /// Create a new empty [`List`].
@@ -449,12 +466,7 @@ impl<T> List<T> {
             2 => match index {
                 0 => self.push_front(value),
                 1 => {
-                    let node = Node {
-                        value: RefCell::new(value),
-                        prev: Some(0),
-                        next: Some(Self::MAX_LEN),
-                    };
-
+                    let node = Node::new(value, Some(0), Some(Self::MAX_LEN));
                     self.inner.insert(Self::MAX_LEN >> 1, node);
                 }
                 2 => self.push_back(value),
@@ -469,11 +481,7 @@ impl<T> List<T> {
                     let prev_ordinal = next.prev.expect("prev");
                     let ordinal = prev_ordinal + ((next_ordinal - prev_ordinal) >> 1);
 
-                    let node = Node {
-                        value: RefCell::new(value),
-                        prev: Some(prev_ordinal),
-                        next: Some(next_ordinal),
-                    };
+                    let node = Node::new(value, Some(prev_ordinal), Some(next_ordinal));
 
                     self.inner.insert(ordinal, node);
                 }
@@ -495,11 +503,7 @@ impl<T> List<T> {
                     debug_assert!(prev < next);
 
                     let new_ordinal = prev + ((next - prev) >> 1);
-                    let new_node = Node {
-                        value: RefCell::new(value),
-                        prev: Some(prev),
-                        next: Some(next),
-                    };
+                    let new_node = Node::new(value, Some(prev), Some(next));
 
                     debug_assert!(!self.inner.list.contains_key(&new_ordinal));
 
@@ -561,7 +565,7 @@ impl<T> List<T> {
             Some(back)
         };
 
-        node.map(|node| node.value.into_inner())
+        node.map(|node| node.into_value())
     }
 
     /// Remove and return the first value in this [`List`].
@@ -577,7 +581,7 @@ impl<T> List<T> {
             Some(front)
         };
 
-        node.map(|node| node.value.into_inner())
+        node.map(|node| node.into_value())
     }
 
     /// Append the given `value` to the back of this [`List`].
@@ -585,21 +589,12 @@ impl<T> List<T> {
         match self.len() {
             0 => self.push_front(value),
             1 => {
-                let node = Node {
-                    value: RefCell::new(value),
-                    prev: Some(0),
-                    next: None,
-                };
-
+                let node = Node::new(value, Some(0), None);
                 self.inner.insert(Self::MAX_LEN, node)
             }
             2 => {
                 let new_ordinal = Self::MAX_LEN >> 1;
-                let new_node = Node {
-                    value: RefCell::new(value),
-                    prev: Some(0),
-                    next: Some(Self::MAX_LEN),
-                };
+                let new_node = Node::new(value, Some(0), Some(Self::MAX_LEN));
 
                 self.inner.insert(new_ordinal, new_node);
                 self.inner.swap(&new_ordinal, &Self::MAX_LEN);
@@ -635,11 +630,7 @@ impl<T> List<T> {
 
                 // then insert the new value
                 let new_ordinal = ordinal - (gap >> 1);
-                let new_node = Node {
-                    value: RefCell::new(value),
-                    prev: Some(ordinal - gap),
-                    next: Some(ordinal),
-                };
+                let new_node = Node::new(value, Some(ordinal - gap), Some(ordinal));
 
                 self.inner.insert(new_ordinal, new_node);
 
@@ -653,32 +644,17 @@ impl<T> List<T> {
     pub fn push_front(&mut self, value: T) {
         match self.len() {
             0 => {
-                let node = Node {
-                    value: RefCell::new(value),
-                    prev: None,
-                    next: None,
-                };
-
+                let node = Node::new(value, None, None);
                 self.inner.insert(0, node);
             }
             1 => {
-                let node = Node {
-                    value: RefCell::new(value),
-                    prev: Some(0),
-                    next: None,
-                };
-
+                let node = Node::new(value, Some(0), None);
                 self.inner.insert(Self::MAX_LEN, node);
                 self.inner.swap(&0, &Self::MAX_LEN);
             }
             2 => {
                 let new_ordinal = Self::MAX_LEN >> 1;
-                let new_node = Node {
-                    value: RefCell::new(value),
-                    prev: Some(0),
-                    next: Some(Self::MAX_LEN),
-                };
-
+                let new_node = Node::new(value, Some(0), Some(Self::MAX_LEN));
                 self.inner.insert(new_ordinal, new_node);
                 self.inner.swap(&new_ordinal, &0);
             }
@@ -716,11 +692,7 @@ impl<T> List<T> {
 
                 // then insert the new value
                 let new_ordinal = ordinal - (gap >> 1);
-                let new_node = Node {
-                    value: RefCell::new(value),
-                    prev: Some(ordinal - gap),
-                    next: Some(ordinal),
-                };
+                let new_node = Node::new(value, Some(ordinal - gap), Some(ordinal));
 
                 self.inner.insert(new_ordinal, new_node);
 
@@ -791,7 +763,7 @@ impl<T> List<T> {
         let ordinal = self.ordinal(index);
         let node = self.inner.remove(ordinal);
 
-        Some(node.value.into_inner())
+        Some(node.into_value())
     }
 
     /// Swap the value at `from` with the value at `to`.
@@ -828,7 +800,7 @@ impl<T> List<T> {
     }
 }
 
-impl<T: PartialEq> PartialEq for List<T> {
+impl<T: PartialEq + fmt::Debug> PartialEq for List<T> {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
             return false;
@@ -838,9 +810,9 @@ impl<T: PartialEq> PartialEq for List<T> {
     }
 }
 
-impl<T: Eq> Eq for List<T> {}
+impl<T: Eq + fmt::Debug> Eq for List<T> {}
 
-impl<T> Extend<T> for List<T> {
+impl<T: fmt::Debug> Extend<T> for List<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for item in iter.into_iter() {
             self.push_back(item);
@@ -848,7 +820,7 @@ impl<T> Extend<T> for List<T> {
     }
 }
 
-impl<T> FromIterator<T> for List<T> {
+impl<T: fmt::Debug> FromIterator<T> for List<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let source = iter.into_iter();
         let mut list = match source.size_hint() {
@@ -865,7 +837,7 @@ impl<T> FromIterator<T> for List<T> {
     }
 }
 
-impl<T> IntoIterator for List<T> {
+impl<T: fmt::Debug> IntoIterator for List<T> {
     type Item = T;
     type IntoIter = IntoIter<T>;
 
@@ -887,7 +859,7 @@ impl<T> IntoIterator for List<T> {
     }
 }
 
-impl<'a, T> IntoIterator for &'a List<T> {
+impl<'a, T: fmt::Debug> IntoIterator for &'a List<T> {
     type Item = Ref<'a, T>;
     type IntoIter = Iter<'a, T>;
 
