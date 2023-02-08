@@ -257,115 +257,101 @@ impl<T> Inner<T> {
     }
 }
 
-/// An iterator to drain the contents of a [`List`]
-pub struct Drain<'a, T> {
-    inner: &'a mut HashMap<usize, Node<T>>,
+struct DrainState {
     size: usize,
     next: Option<usize>,
     last: Option<usize>,
+}
+
+impl DrainState {
+    fn next<T: fmt::Debug>(&mut self, list: &mut HashMap<usize, Node<T>>) -> Option<T> {
+        let ordinal = self.next?;
+        let node = list.remove(&ordinal).expect("node");
+
+        self.size -= 1;
+
+        self.next = if self.last == Some(ordinal) {
+            None
+        } else {
+            node.next
+        };
+
+        if self.next.is_none() {
+            self.last = None;
+        }
+
+        Some(node.into_value())
+    }
+
+    fn next_back<T: fmt::Debug>(&mut self, list: &mut HashMap<usize, Node<T>>) -> Option<T> {
+        let ordinal = self.last?;
+        let node = list.remove(&ordinal).expect("node");
+
+        self.size -= 1;
+
+        self.last = if self.next == Some(ordinal) {
+            None
+        } else {
+            node.prev
+        };
+
+        if self.last.is_none() {
+            self.next = None;
+        }
+
+        Some(node.into_value())
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.size, Some(self.size))
+    }
+}
+
+/// An iterator to drain the contents of a [`List`]
+pub struct Drain<'a, T> {
+    inner: &'a mut HashMap<usize, Node<T>>,
+    state: DrainState,
 }
 
 impl<'a, T: fmt::Debug> Iterator for Drain<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let ordinal = self.next?;
-        let node = self.inner.remove(&ordinal).expect("node");
-
-        self.size -= 1;
-
-        self.next = if self.last == Some(ordinal) {
-            None
-        } else {
-            node.next
-        };
-
-        if self.next.is_none() {
-            self.last = None;
-        }
-
-        Some(node.into_value())
+        self.state.next(&mut self.inner)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.size, Some(self.size))
+        self.state.size_hint()
     }
 }
 
 impl<'a, T: fmt::Debug> DoubleEndedIterator for Drain<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let ordinal = self.last?;
-        let node = self.inner.remove(&ordinal).expect("node");
-
-        self.size -= 1;
-
-        self.last = if self.next == Some(ordinal) {
-            None
-        } else {
-            node.prev
-        };
-
-        if self.last.is_none() {
-            self.next = None;
-        }
-
-        Some(node.into_value())
+        self.state.next_back(&mut self.inner)
     }
 }
 
 /// An iterator over the contents of a [`List`]
 pub struct IntoIter<T> {
     inner: HashMap<usize, Node<T>>,
-    size: usize,
-    next: Option<usize>,
-    last: Option<usize>,
+    state: DrainState,
 }
 
 impl<T: fmt::Debug> Iterator for IntoIter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let ordinal = self.next?;
-        let node = self.inner.remove(&ordinal).expect("node");
-
-        self.size -= 1;
-
-        self.next = if self.last == Some(ordinal) {
-            None
-        } else {
-            node.next
-        };
-
-        if self.next.is_none() {
-            self.last = None;
-        }
-
-        Some(node.into_value())
+        self.state.next(&mut self.inner)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.size, Some(self.size))
+        self.state.size_hint()
     }
 }
 
 impl<T: fmt::Debug> DoubleEndedIterator for IntoIter<T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let ordinal = self.last?;
-        let node = self.inner.remove(&ordinal).expect("node");
-
-        self.size -= 1;
-
-        self.last = if self.next == Some(ordinal) {
-            None
-        } else {
-            node.prev
-        };
-
-        if self.last.is_none() {
-            self.next = None;
-        }
-
-        Some(node.into_value())
+        self.state.next_back(&mut self.inner)
     }
 }
 
@@ -477,9 +463,7 @@ impl<T: fmt::Debug> List<T> {
 
         Drain {
             inner: &mut self.inner.list,
-            size,
-            next,
-            last,
+            state: DrainState { size, next, last },
         }
     }
 
@@ -929,9 +913,7 @@ impl<T: fmt::Debug> IntoIterator for List<T> {
 
         IntoIter {
             inner: self.inner.list,
-            size,
-            next,
-            last,
+            state: DrainState { size, next, last },
         }
     }
 }
