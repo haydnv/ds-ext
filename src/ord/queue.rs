@@ -5,7 +5,7 @@
 //! For indexing by cardinal order, use a [`super::List`] instead.
 
 use std::borrow::Borrow;
-use std::cell::{RefCell, RefMut};
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::Arc;
@@ -24,7 +24,12 @@ struct Item<K, V> {
 
 impl<K, V> Item<K, V> {
     #[inline]
-    fn state(&self) -> RefMut<ItemState<K>> {
+    fn state(&self) -> Ref<ItemState<K>> {
+        self.state.borrow()
+    }
+
+    #[inline]
+    fn state_mut(&self) -> RefMut<ItemState<K>> {
         self.state.borrow_mut()
     }
 }
@@ -157,7 +162,7 @@ pub struct LinkedHashMap<K, V> {
     tail: Option<Arc<K>>,
 }
 
-impl<K: Clone + Eq + Hash, V: Clone> Clone for LinkedHashMap<K, V> {
+impl<K: Clone + Eq + Hash + fmt::Debug, V: Clone> Clone for LinkedHashMap<K, V> {
     fn clone(&self) -> Self {
         let mut other = Self::with_capacity(self.list.capacity());
 
@@ -171,7 +176,7 @@ impl<K: Clone + Eq + Hash, V: Clone> Clone for LinkedHashMap<K, V> {
     }
 }
 
-impl<K: Eq + Hash, V> LinkedHashMap<K, V> {
+impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
     /// Construct a new [`LinkedHashMap`].
     pub fn new() -> Self {
         Self {
@@ -198,30 +203,39 @@ impl<K: Eq + Hash, V> LinkedHashMap<K, V> {
             return false;
         };
 
-        let mut item_state = item.state();
+        let mut item_state = item.state_mut();
 
-        let last = if item_state.prev.is_none() {
+        #[cfg(debug_assertions)]
+        if item_state.prev.is_some() || item_state.next.is_some() {
+            assert_ne!(item_state.next, item_state.prev);
+        }
+
+        if item_state.prev.is_none() {
             // can't bump the first item
             return true;
         } else if item_state.next.is_none() && item_state.prev.is_some() {
             // bump the last item
-
             let prev_key = item_state.prev.as_ref().expect("prev");
-            let mut prev = self.list.get::<K>(prev_key).expect("prev").state();
+            let mut prev = self.list.get::<K>(prev_key).expect("prev").state_mut();
+
+            debug_assert_ne!(prev.next, prev.prev);
 
             mem::swap(&mut prev.next, &mut item_state.next); // set prev.next
             mem::swap(&mut item_state.prev, &mut prev.prev); // set item.prev
             mem::swap(&mut item_state.next, &mut prev.prev); // set item.next & prev.prev
 
-            item_state.next.clone()
+            debug_assert_ne!(prev.next, prev.prev);
         } else {
             // bump an item in the middle
 
             let next_key = item_state.next.as_ref().expect("next");
-            let mut next = self.list.get::<K>(next_key).expect("next").state();
-
             let prev_key = item_state.prev.as_ref().expect("prev").clone();
-            let mut prev = self.list.get::<K>(&prev_key).expect("prev").state();
+
+            let mut next = self.list.get::<K>(next_key).expect("next").state_mut();
+            debug_assert_ne!(next.next, next.prev);
+
+            let mut prev = self.list.get::<K>(&prev_key).expect("prev").state_mut();
+            debug_assert_ne!(prev.next, prev.prev);
 
             mem::swap(&mut next.prev, &mut item_state.prev); // set next.prev
             mem::swap(&mut item_state.prev, &mut prev.prev); // set item.prev
@@ -229,23 +243,18 @@ impl<K: Eq + Hash, V> LinkedHashMap<K, V> {
 
             item_state.prev = Some(prev_key); // set item.prev
 
-            None
-        };
-
-        let first = if let Some(prev_key) = &item_state.prev {
-            let mut skip = self.list.get::<K>(prev_key).expect("skip").state();
-            skip.next = Some(item.key.clone());
-            None
-        } else {
-            Some(item.key.clone())
-        };
-
-        if let Some(first) = first {
-            self.head = Some(first);
+            debug_assert_ne!(next.next, next.prev);
+            debug_assert_ne!(prev.next, prev.prev);
         }
 
-        if let Some(last) = last {
-            self.tail = Some(last);
+        debug_assert_ne!(item_state.next, item_state.prev);
+
+        if item_state.prev.is_none() {
+            self.head = Some(item.key.clone());
+        }
+
+        if item_state.next.is_none() {
+            self.tail = Some(item.key.clone());
         }
 
         true
@@ -313,12 +322,18 @@ impl<K: Eq + Hash, V> LinkedHashMap<K, V> {
         mem::swap(&mut self.tail, &mut prev);
 
         if let Some(prev_key) = &prev {
-            let mut prev = self.list.get::<K>(prev_key).expect("prev").state();
+            let mut prev = self.list.get::<K>(prev_key).expect("prev").state_mut();
             prev.next = Some(key.clone());
+            debug_assert_ne!(prev.prev, prev.next);
         }
 
         if self.head.is_none() {
             self.head = Some(key.clone());
+        }
+
+        #[cfg(debug_assertions)]
+        if prev.is_some() || next.is_some() {
+            assert_ne!(prev, next);
         }
 
         let item = Item {
@@ -424,7 +439,12 @@ impl<K: Eq + Hash, V> LinkedHashMap<K, V> {
     }
 
     fn remove_inner(&mut self, item: Item<K, V>) -> V {
-        let mut item_state = item.state();
+        let mut item_state = item.state_mut();
+
+        #[cfg(debug_assertions)]
+        if item_state.prev.is_some() || item_state.next.is_some() {
+            assert_ne!(item_state.next, item_state.prev);
+        }
 
         if item_state.prev.is_none() && item_state.next.is_none() {
             // there was only one item and now the map is empty
@@ -432,30 +452,48 @@ impl<K: Eq + Hash, V> LinkedHashMap<K, V> {
             self.tail = None;
         } else if item_state.prev.is_none() {
             // the last item has been removed
+
             self.tail = item_state.next.clone();
 
             let next_key = item_state.next.as_ref().expect("next key");
-            let mut next = self.list.get::<K>(next_key).expect("next").state();
+            let mut next = self.list.get::<K>(next_key).expect("next").state_mut();
+            debug_assert_ne!(next.next, next.prev);
 
             mem::swap(&mut next.prev, &mut item_state.prev);
+
+            debug_assert_ne!(next.next, next.prev);
         } else if item_state.next.is_none() {
             // the first item has been removed
             self.head = item_state.prev.clone();
 
             let prev_key = item_state.prev.as_ref().expect("previous key");
-            let mut prev = self.list.get::<K>(prev_key).expect("prev").state();
+            let mut prev = self.list.get::<K>(prev_key).expect("prev").state_mut();
+            debug_assert_ne!(prev.next, prev.prev);
 
             mem::swap(&mut prev.next, &mut item_state.next);
+
+            debug_assert_ne!(prev.next, prev.prev);
         } else {
             // an item in the middle has been removed
+
             let prev_key = item_state.prev.as_ref().expect("previous key");
-            let mut prev = self.list.get::<K>(prev_key).expect("prev").state();
+            let mut prev = self.list.get::<K>(prev_key).expect("prev").state_mut();
+            debug_assert_ne!(prev.next, prev.prev);
 
             let next_key = item_state.next.as_ref().expect("next key");
-            let mut next = self.list.get::<K>(next_key).expect("next item").state();
+            let mut next = self.list.get::<K>(next_key).expect("next item").state_mut();
+            debug_assert_ne!(next.next, next.prev);
 
             mem::swap(&mut next.prev, &mut item_state.prev);
             mem::swap(&mut prev.next, &mut item_state.next);
+
+            debug_assert_ne!(prev.next, prev.prev);
+            debug_assert_ne!(next.next, next.prev);
+        }
+
+        #[cfg(debug_assertions)]
+        if item_state.prev.is_some() || item_state.next.is_some() {
+            assert_ne!(item_state.next, item_state.prev);
         }
 
         std::mem::drop(item_state);
@@ -532,7 +570,7 @@ impl<K: Eq + Hash, V> LinkedHashMap<K, V> {
     }
 }
 
-impl<K: Eq + Hash, V> FromIterator<(K, V)> for LinkedHashMap<K, V> {
+impl<K: Eq + Hash + fmt::Debug, V> FromIterator<(K, V)> for LinkedHashMap<K, V> {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
         let iter = iter.into_iter();
         let mut map = match iter.size_hint() {
