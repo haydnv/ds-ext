@@ -523,7 +523,7 @@ impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
     }
 
     /// Swap the position of two keys in this [`LinkedHashMap`].
-    /// Returns `true` if both keys are present in the [`LinkedHashMap`].
+    /// Returns `true` if both keys are present.
     pub fn swap<Q>(&mut self, l: &Q, r: &Q) -> bool
     where
         Arc<K>: Borrow<Q>,
@@ -545,9 +545,9 @@ impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
             return false;
         };
 
-        let mut l_state = l_item.state();
-        let mut r_state = r_item.state();
-        mem::swap(&mut l_state, &mut r_state);
+        let mut l_state = l_item.state_mut();
+        let mut r_state = r_item.state_mut();
+        mem::swap(&mut *l_state, &mut *r_state);
 
         if self.head.as_ref() == Some(l_key) {
             self.head = Some(r_key.clone());
