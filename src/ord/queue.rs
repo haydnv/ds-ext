@@ -210,38 +210,42 @@ impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
             assert_ne!(item_state.next, item_state.prev);
         }
 
-        if item_state.prev.is_none() {
+        if item_state.next.is_none() {
             // can't bump the first item
             return true;
-        } else if item_state.next.is_none() && item_state.prev.is_some() {
+        } else if item_state.prev.is_none() && item_state.next.is_some() {
             // bump the last item
-            let prev_key = item_state.prev.as_ref().expect("prev");
-            let mut prev = self.list.get::<K>(prev_key).expect("prev").state_mut();
 
-            debug_assert_ne!(prev.next, prev.prev);
+            let next_key = item_state.next.as_ref().expect("next key");
+            let mut next = self.list.get::<K>(next_key).expect("next item").state_mut();
 
-            mem::swap(&mut prev.next, &mut item_state.next); // set prev.next
-            mem::swap(&mut item_state.prev, &mut prev.prev); // set item.prev
-            mem::swap(&mut item_state.next, &mut prev.prev); // set item.next & prev.prev
+            debug_assert_ne!(next.next, next.prev);
 
-            debug_assert_ne!(prev.next, prev.prev);
+            mem::swap(&mut next.prev, &mut item_state.prev); // set next.prev
+            mem::swap(&mut item_state.next, &mut next.next); // set item.next
+            mem::swap(&mut item_state.prev, &mut next.next); // set item.prev & next.next
+
+            debug_assert_ne!(next.next, next.prev);
         } else {
             // bump an item in the middle
 
-            let next_key = item_state.next.as_ref().expect("next");
-            let prev_key = item_state.prev.as_ref().expect("prev").clone();
-
-            let mut next = self.list.get::<K>(next_key).expect("next").state_mut();
-            debug_assert_ne!(next.next, next.prev);
-
-            let mut prev = self.list.get::<K>(&prev_key).expect("prev").state_mut();
+            let prev_key = item_state.prev.as_ref().expect("previous key");
+            let mut prev = self.list.get::<K>(prev_key).expect("prev").state_mut();
             debug_assert_ne!(prev.next, prev.prev);
 
-            mem::swap(&mut next.prev, &mut item_state.prev); // set next.prev
-            mem::swap(&mut item_state.prev, &mut prev.prev); // set item.prev
-            mem::swap(&mut prev.next, &mut item_state.next); // set prev.next
+            let next_key = item_state.next.as_ref().expect("next key").clone();
+            let mut next = self
+                .list
+                .get::<K>(&next_key)
+                .expect("next item")
+                .state_mut();
+            debug_assert_ne!(next.next, next.prev);
 
-            item_state.prev = Some(prev_key); // set item.prev
+            mem::swap(&mut prev.next, &mut item_state.next); // set prev.next
+            mem::swap(&mut item_state.next, &mut next.next); // set item.next
+            mem::swap(&mut next.prev, &mut item_state.prev); // set next.prev
+
+            item_state.prev = Some(next_key); // set item.prev
 
             debug_assert_ne!(next.next, next.prev);
             debug_assert_ne!(prev.next, prev.prev);
