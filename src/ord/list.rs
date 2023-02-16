@@ -122,6 +122,18 @@ impl<T> Inner<T> {
     }
 
     fn insert(&mut self, ordinal: usize, node: Node<T>) {
+        debug_assert!(
+            !self.list.contains_key(&ordinal),
+            "there is already an entry at {}",
+            ordinal
+        );
+
+        debug_assert!(
+            ordinal % 2 == 0,
+            "ordinal {} should be divisible by 2",
+            ordinal
+        );
+
         debug_assert!(self.is_valid());
 
         if let Some(prev) = node.prev.as_ref() {
@@ -418,7 +430,7 @@ pub struct List<T> {
 }
 
 impl<T: fmt::Debug> List<T> {
-    const MAX_LEN: usize = usize::MAX;
+    const MAX_LEN: usize = 2 << 31;
 
     /// Create a new empty [`List`].
     pub fn new() -> Self {
@@ -660,41 +672,35 @@ impl<T: fmt::Debug> List<T> {
             }
             _ => {
                 // traverse back to find the lowest-density insertion point
-                let mut ordinal = Self::MAX_LEN;
-                let mut gap = 0;
+                let (prev, ordinal, next) = {
+                    let mut ordinal = Self::MAX_LEN;
+                    let insert_after = loop {
+                        let node = self.inner.get(&ordinal);
 
-                loop {
-                    let node = self.inner.get(&ordinal);
+                        if let Some(prev) = node.prev {
+                            if let Some(next) = node.next {
+                                if ordinal - prev <= next - ordinal {
+                                    break node;
+                                }
+                            }
 
-                    if let Some(prev) = node.prev {
-                        let prev_gap = ordinal - prev;
-
-                        debug_assert!(prev_gap > 2);
-                        debug_assert_eq!(ordinal - prev_gap, prev);
-                        debug_assert!(self.inner.list.contains_key(&(ordinal - prev_gap)));
-
-                        if prev_gap <= gap {
-                            break;
-                        } else {
-                            gap = prev_gap;
                             ordinal = prev;
+                        } else {
+                            break node;
                         }
-                    } else {
-                        break;
-                    }
-                }
+                    };
 
-                debug_assert!(gap > 0);
-                debug_assert!(ordinal >= gap);
+                    let next = insert_after.next.expect("next");
+                    (ordinal, ordinal + ((next - ordinal) >> 1), next)
+                };
 
                 // then insert the new value
-                let new_ordinal = ordinal - (gap >> 1);
-                let new_node = Node::new(value, Some(ordinal - gap), Some(ordinal));
+                let node = Node::new(value, Some(prev), Some(next));
 
-                self.inner.insert(new_ordinal, new_node);
+                self.inner.insert(ordinal, node);
 
                 // and swap it forward
-                self.inner.swap(new_ordinal, Self::MAX_LEN);
+                self.inner.swap(ordinal, Self::MAX_LEN);
             }
         }
     }
@@ -936,7 +942,7 @@ mod tests {
     fn test_list() {
         let mut rng = rand::thread_rng();
 
-        for i in 0..64 {
+        for i in (0..8).into_iter().map(|i| 2usize.pow(i)) {
             let mut list = List::new();
             let mut vector = Vec::new();
 
