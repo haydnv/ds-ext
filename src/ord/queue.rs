@@ -210,22 +210,23 @@ impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
             assert_ne!(item_state.next, item_state.prev);
         }
 
-        if item_state.next.is_none() {
+        if item_state.prev.is_none() {
             // can't bump the first item
             return true;
-        } else if item_state.prev.is_none() && item_state.next.is_some() {
+        } else if item_state.next.is_none() && item_state.prev.is_some() {
             // bump the last item
 
-            let next_key = item_state.next.as_ref().expect("next key");
-            let mut next = self.list.get::<K>(next_key).expect("next item").state_mut();
+            let prev_key = item_state.prev.as_ref().expect("prev key");
+            let mut prev = self.list.get::<K>(prev_key).expect("prev item").state_mut();
 
-            debug_assert_ne!(next.next, next.prev);
+            debug_assert_ne!(prev.next, prev.prev);
 
-            mem::swap(&mut next.prev, &mut item_state.prev); // set next.prev
-            mem::swap(&mut item_state.next, &mut next.next); // set item.next
-            mem::swap(&mut item_state.prev, &mut next.next); // set item.prev & next.next
+            mem::swap(&mut prev.next, &mut item_state.next); // set prev.next
+            mem::swap(&mut item_state.prev, &mut prev.prev); // set item.prev
+            mem::swap(&mut item_state.next, &mut prev.prev); // set item.next & prev.prev
 
-            debug_assert_ne!(next.next, next.prev);
+            debug_assert_ne!(item_state.next, item_state.prev);
+            debug_assert_ne!(prev.next, prev.prev);
         } else {
             // bump an item in the middle
 
@@ -234,19 +235,16 @@ impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
             debug_assert_ne!(prev.next, prev.prev);
 
             let next_key = item_state.next.as_ref().expect("next key").clone();
-            let mut next = self
-                .list
-                .get::<K>(&next_key)
-                .expect("next item")
-                .state_mut();
+            let mut next = self.list.get::<K>(&next_key).expect("next").state_mut();
             debug_assert_ne!(next.next, next.prev);
 
-            mem::swap(&mut prev.next, &mut item_state.next); // set prev.next
-            mem::swap(&mut item_state.next, &mut next.next); // set item.next
             mem::swap(&mut next.prev, &mut item_state.prev); // set next.prev
+            mem::swap(&mut item_state.prev, &mut prev.prev); // set item.prev
+            mem::swap(&mut prev.next, &mut item_state.next); // set prev.next
 
-            item_state.prev = Some(next_key); // set item.prev
+            item_state.next = Some(next_key); // set item.next
 
+            debug_assert_ne!(item_state.next, item_state.prev);
             debug_assert_ne!(next.next, next.prev);
             debug_assert_ne!(prev.next, prev.prev);
         }
@@ -321,29 +319,22 @@ impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
         let old_value = self.remove(&key);
 
         let key = Arc::new(key);
-        let next = None;
-        let mut prev = Some(key.clone());
-        mem::swap(&mut self.tail, &mut prev);
+        let mut next = Some(key.clone());
+        mem::swap(&mut self.head, &mut next);
 
-        if let Some(prev_key) = &prev {
+        if let Some(prev_key) = &next {
             let mut prev = self.list.get::<K>(prev_key).expect("prev").state_mut();
-            prev.next = Some(key.clone());
+            prev.prev = Some(key.clone());
             debug_assert_ne!(prev.prev, prev.next);
-        }
-
-        if self.head.is_none() {
-            self.head = Some(key.clone());
-        }
-
-        #[cfg(debug_assertions)]
-        if prev.is_some() || next.is_some() {
-            assert_ne!(prev, next);
+        } else {
+            debug_assert!(self.tail.is_none());
+            self.tail = Some(key.clone());
         }
 
         let item = Item {
             key: key.clone(),
             value,
-            state: RefCell::new(ItemState { prev, next }),
+            state: RefCell::new(ItemState { prev: None, next }),
         };
 
         assert!(self.list.insert(key, item).is_none());
@@ -549,9 +540,17 @@ impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
             return false;
         };
 
-        let mut l_state = l_item.state_mut();
-        let mut r_state = r_item.state_mut();
-        mem::swap(&mut *l_state, &mut *r_state);
+        if l_item.state().next.as_ref() == Some(r_key) {
+            let key = r_key.clone();
+            return self.bump(&key);
+        } else if r_item.state().next.as_ref() == Some(l_key) {
+            let key = l_key.clone();
+            return self.bump(&key);
+        } else {
+            let mut l_state = l_item.state_mut();
+            let mut r_state = r_item.state_mut();
+            mem::swap(&mut *l_state, &mut *r_state);
+        }
 
         if self.head.as_ref() == Some(l_key) {
             self.head = Some(r_key.clone());
@@ -650,7 +649,7 @@ mod tests {
 
             let last_key = queue.tail.as_ref().expect("last key");
             let last = queue.list.get::<K>(last_key).expect("last item");
-            assert!(last.state.borrow().next.is_none());
+            assert_eq!(last.state().next, None);
         }
 
         let mut last = None;
@@ -679,6 +678,8 @@ mod tests {
             validate(&queue);
         }
 
+        assert_eq!(queue.len(), expected.len());
+
         let mut actual = Vec::with_capacity(expected.len());
         for (i, s) in queue.iter() {
             assert_eq!(&i.to_string(), s);
@@ -686,7 +687,7 @@ mod tests {
         }
 
         assert_eq!(actual.len(), expected.len());
-        assert!(actual.iter().zip(expected).all(|(l, r)| **l == r))
+        assert!(actual.iter().zip(expected.into_iter().rev()).all(|(l, r)| **l == r))
     }
 
     #[test]
