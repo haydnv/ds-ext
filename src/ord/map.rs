@@ -403,3 +403,22 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V: fmt::Debug> fmt::Debug for OrdHashMap<K
         f.write_str("}")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_drain() {
+        let mut map: OrdHashMap<u32, String> =
+            (0..10).into_iter().map(|i| (i, i.to_string())).collect();
+
+        assert_eq!(
+            map.drain().collect::<Vec<_>>(),
+            (0..10)
+                .into_iter()
+                .map(|i| (i, i.to_string()))
+                .collect::<Vec<_>>()
+        );
+    }
+}

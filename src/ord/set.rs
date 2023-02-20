@@ -262,6 +262,8 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
 
     /// Drain all values from this [`OrdHashSet`].
     pub fn drain(&mut self) -> Drain<T> {
+        self.inner.clear();
+
         Drain {
             inner: self.order.drain(),
         }
@@ -452,4 +454,21 @@ where
     }
 
     lo
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_drain() {
+        let mut set = OrdHashSet::from_iter(0..10);
+        let expected = (0..10).into_iter().collect::<Vec<_>>();
+        let actual = set
+            .drain()
+            .map(|i| Arc::try_unwrap(i).expect("i"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(expected, actual);
+    }
 }
