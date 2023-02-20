@@ -214,6 +214,22 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
             .map(|key| self.get(&**key).expect("value"))
     }
 
+    /// Bisect this map to match and remove an entry using the provided comparison.
+    ///
+    /// The first key for which the comparison returns `Some(Ordering::Equal)` will be returned.
+    /// This method assumes that any partially-ordered keys (where `cmp(key).is_none()`) lie at the
+    /// beginning and/or end of the distribution.
+    pub fn bisect_and_remove<Cmp>(&mut self, cmp: Cmp) -> Option<(K, V)>
+    where
+        Cmp: Fn(&K) -> Option<Ordering> + Copy,
+    {
+        let key = self.order.bisect_and_remove(|key| cmp(&*key))?;
+        let value = self.inner.remove(&**key).expect("value");
+        let key = Arc::try_unwrap(key).expect("key");
+        let key = Arc::try_unwrap(key).expect("key");
+        Some((key, value))
+    }
+
     /// Remove all entries from this [`OrdHashMap`].
     pub fn clear(&mut self) {
         self.inner.clear();

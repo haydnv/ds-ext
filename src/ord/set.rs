@@ -254,6 +254,45 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
         self.bisect_inner(cmp, lo, hi)
     }
 
+    /// Bisect this set to match and remove a key using the provided comparison.
+    ///
+    /// The first key for which the comparison returns `Some(Ordering::Equal)` will be returned.
+    /// This method assumes that any partially-ordered keys (where `cmp(key).is_none()`) lie at the
+    /// beginning and/or end of the distribution.
+    pub fn bisect_and_remove<Cmp>(&mut self, cmp: Cmp) -> Option<Arc<T>>
+    where
+        Cmp: Fn(&T) -> Option<Ordering> + Copy,
+    {
+        let mut lo = self.bisect_lo(cmp);
+        let mut hi = self.bisect_hi(cmp);
+
+        let key = loop {
+            let mid = (lo + hi) >> 1;
+            let key = self.order.get(mid).expect("key");
+
+            if let Some(order) = cmp(&**key) {
+                match order {
+                    Ordering::Less => hi = mid,
+                    Ordering::Equal => {
+                        lo = mid;
+                        break Some(key.clone());
+                    }
+                    Ordering::Greater => lo = mid + 1,
+                }
+            } else {
+                panic!("comparison does not match key distribution")
+            }
+
+            if lo >= hi {
+                break None;
+            }
+        }?;
+
+        self.order.remove(lo);
+        self.inner.remove(&key);
+        Some(key)
+    }
+
     /// Remove all values from this [`OrdHashSet`].
     pub fn clear(&mut self) {
         self.inner.clear();
