@@ -204,6 +204,8 @@ impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
         };
 
         let mut item_state = item.state_mut();
+        debug_assert_ne!(item_state.prev.as_ref(), Some(&item.key));
+        debug_assert_ne!(item_state.next.as_ref(), Some(&item.key));
 
         #[cfg(debug_assertions)]
         if item_state.prev.is_some() || item_state.next.is_some() {
@@ -216,8 +218,8 @@ impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
         } else if item_state.next.is_none() && item_state.prev.is_some() {
             // bump the last item
 
-            let prev_key = item_state.prev.as_ref().expect("prev key");
-            let mut prev = self.list.get::<K>(prev_key).expect("prev item").state_mut();
+            let prev_key = item_state.prev.as_ref().expect("prev key").clone();
+            let mut prev = self.list.get::<K>(&prev_key).expect("prev").state_mut();
 
             debug_assert_ne!(prev.next, prev.prev);
 
@@ -225,13 +227,16 @@ impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
             mem::swap(&mut item_state.prev, &mut prev.prev); // set item.prev
             mem::swap(&mut item_state.next, &mut prev.prev); // set item.next & prev.prev
 
-            debug_assert_ne!(item_state.next, item_state.prev);
-            debug_assert_ne!(prev.next, prev.prev);
+            debug_assert_eq!(prev.prev.as_ref(), Some(&item.key));
+            debug_assert_ne!(prev.next.as_ref(), Some(&item.key));
+            debug_assert_eq!(prev.next, None);
+
+            self.tail = Some(prev_key)
         } else {
             // bump an item in the middle
 
-            let prev_key = item_state.prev.as_ref().expect("previous key");
-            let mut prev = self.list.get::<K>(prev_key).expect("prev").state_mut();
+            let prev_key = item_state.prev.as_ref().expect("previous key").clone();
+            let mut prev = self.list.get::<K>(&prev_key).expect("prev").state_mut();
             debug_assert_ne!(prev.next, prev.prev);
 
             let next_key = item_state.next.as_ref().expect("next key").clone();
@@ -242,22 +247,28 @@ impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
             mem::swap(&mut item_state.prev, &mut prev.prev); // set item.prev
             mem::swap(&mut prev.next, &mut item_state.next); // set prev.next
 
-            item_state.next = Some(next_key); // set item.next
+            item_state.next = Some(prev_key);
 
-            debug_assert_ne!(item_state.next, item_state.prev);
             debug_assert_ne!(next.next, next.prev);
             debug_assert_ne!(prev.next, prev.prev);
+
+            if next.next.is_none() {
+                assert_eq!(self.tail, prev.next, "tail is {:?}", self.tail);
+            }
         }
 
-        debug_assert_ne!(item_state.next, item_state.prev);
-
-        if item_state.prev.is_none() {
+        if let Some(prev_key) = &item_state.prev {
+            let mut prev = self.list.get::<K>(prev_key).expect("prev").state_mut();
+            prev.next = Some(item.key.clone());
+        } else {
             self.head = Some(item.key.clone());
         }
 
-        if item_state.next.is_none() {
-            self.tail = Some(item.key.clone());
-        }
+        debug_assert_ne!(item_state.next, item_state.prev);
+        debug_assert_ne!(item_state.prev.as_ref(), Some(&item.key));
+        debug_assert_ne!(item_state.next.as_ref(), Some(&item.key));
+
+        std::mem::drop(item_state);
 
         true
     }
@@ -446,31 +457,37 @@ impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
             self.head = None;
             self.tail = None;
         } else if item_state.prev.is_none() {
-            // the last item has been removed
+            // the first item has been removed
+            self.head = item_state.next.clone();
 
-            self.tail = item_state.next.clone();
-
-            let next_key = item_state.next.as_ref().expect("next key");
-            let mut next = self.list.get::<K>(next_key).expect("next").state_mut();
+            let next_key = self.head.as_ref().expect("next key");
+            let mut next = self.list.get::<K>(&next_key).expect("next").state_mut();
             debug_assert_ne!(next.next, next.prev);
 
             mem::swap(&mut next.prev, &mut item_state.prev);
 
-            debug_assert_ne!(next.next, next.prev);
+            if next.next.is_none() {
+                debug_assert_eq!(self.tail.as_ref(), Some(next_key));
+            } else {
+                debug_assert_ne!(next.next, next.prev);
+            }
         } else if item_state.next.is_none() {
-            // the first item has been removed
-            self.head = item_state.prev.clone();
+            // the last item has been removed
+            self.tail = item_state.prev.clone();
 
-            let prev_key = item_state.prev.as_ref().expect("previous key");
+            let prev_key = self.tail.as_ref().expect("previous key");
             let mut prev = self.list.get::<K>(prev_key).expect("prev").state_mut();
             debug_assert_ne!(prev.next, prev.prev);
 
             mem::swap(&mut prev.next, &mut item_state.next);
 
-            debug_assert_ne!(prev.next, prev.prev);
+            if prev.prev.is_none() {
+                debug_assert_eq!(self.head.as_ref(), Some(prev_key));
+            } else {
+                debug_assert_ne!(prev.next, prev.prev);
+            }
         } else {
             // an item in the middle has been removed
-
             let prev_key = item_state.prev.as_ref().expect("previous key");
             let mut prev = self.list.get::<K>(prev_key).expect("prev").state_mut();
             debug_assert_ne!(prev.next, prev.prev);
@@ -486,12 +503,8 @@ impl<K: Eq + Hash + fmt::Debug, V> LinkedHashMap<K, V> {
             debug_assert_ne!(next.next, next.prev);
         }
 
-        #[cfg(debug_assertions)]
-        if item_state.prev.is_some() || item_state.next.is_some() {
-            assert_ne!(item_state.next, item_state.prev);
-        }
-
         std::mem::drop(item_state);
+
         item.value
     }
 
@@ -608,65 +621,73 @@ impl<K: Eq + Hash + fmt::Debug, V: fmt::Debug> fmt::Debug for LinkedHashMap<K, V
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::fmt;
+#[allow(dead_code)]
+fn validate<K: Eq + Hash + fmt::Debug, V>(queue: &LinkedHashMap<K, V>) {
+    if queue.list.is_empty() {
+        assert!(queue.head.is_none(), "head is {:?}", queue.head);
+        assert!(queue.tail.is_none(), "tail is {:?}", queue.tail);
+    } else {
+        let first_key = queue.head.as_ref().expect("first key");
+        let first = queue.list.get::<K>(first_key).expect("first item");
+        assert_eq!(first.state().prev, None);
 
-    use rand::{thread_rng, Rng};
+        let last_key = queue.tail.as_ref().expect("last key");
+        let last = queue.list.get::<K>(last_key).expect("last item");
+        assert_eq!(last.state().next, None);
+    }
 
-    use super::*;
+    let mut size = 0;
+    let mut last = None;
+    let mut next = queue.head.clone();
+    while let Some(key) = next {
+        let item = queue.list.get::<K>(&key).expect("item");
 
-    #[allow(dead_code)]
-    fn print_debug<K: fmt::Display + Eq + Hash, V>(queue: &LinkedHashMap<K, V>) {
-        let mut next = queue.head.clone();
-        while let Some(next_key) = next {
-            let item = queue.list.get::<K>(&next_key).expect("item").state();
+        let item_state = item.state.borrow();
+        assert_ne!(item_state.prev.as_ref(), Some(&key));
+        assert_ne!(item_state.next.as_ref(), Some(&key));
 
-            if let Some(prev_key) = item.prev.as_ref() {
-                print!("{}-", prev_key);
-            }
+        let prev_key = item_state.prev.as_ref();
+        assert_eq!(last.as_ref(), prev_key);
 
-            next = item.next.clone();
-            if let Some(next_key) = &next {
-                print!("-{}", next_key);
-            }
+        last = Some(key);
+        next = item.state.borrow().next.clone();
+        size += 1;
+    }
 
-            print!(" ");
+    assert_eq!(size, queue.len());
+}
+
+#[allow(dead_code)]
+fn print_debug<K: fmt::Debug + Eq + Hash, V>(queue: &LinkedHashMap<K, V>) {
+    let mut next = queue.head.clone();
+
+    if next.is_some() {
+        println!();
+    }
+
+    while let Some(next_key) = next {
+        let item = queue.list.get::<K>(&next_key).expect("item").state();
+
+        if let Some(prev_key) = item.prev.as_ref() {
+            print!("{:?}-", prev_key);
+        }
+
+        print!("{:?}", next_key);
+
+        next = item.next.clone();
+        if let Some(next_key) = &next {
+            print!("-{:?}", next_key);
         }
 
         println!();
     }
+}
 
-    fn validate<K: fmt::Debug + Eq + Hash, V>(queue: &LinkedHashMap<K, V>) {
-        if queue.list.is_empty() {
-            assert!(queue.head.is_none(), "head is {:?}", queue.head);
-            assert!(queue.tail.is_none(), "tail is {:?}", queue.tail);
-        } else {
-            let first_key = queue.head.as_ref().expect("first key");
-            let first = queue.list.get::<K>(first_key).expect("first item");
+#[cfg(test)]
+mod tests {
+    use rand::{thread_rng, Rng};
 
-            assert!(first.state.borrow().prev.is_none());
-
-            let last_key = queue.tail.as_ref().expect("last key");
-            let last = queue.list.get::<K>(last_key).expect("last item");
-            assert_eq!(last.state().next, None);
-        }
-
-        let mut last = None;
-        let mut next = queue.head.clone();
-        while let Some(key) = next {
-            let item = queue.list.get::<K>(&key).expect("item");
-
-            if let Some(last_key) = &last {
-                let item_state = item.state.borrow();
-                let prev_key = item_state.prev.as_ref().expect("previous key");
-                assert_eq!(last_key, prev_key);
-            }
-
-            last = Some(key);
-            next = item.state.borrow().next.clone();
-        }
-    }
+    use super::*;
 
     #[test]
     fn test_order() {
@@ -687,7 +708,10 @@ mod tests {
         }
 
         assert_eq!(actual.len(), expected.len());
-        assert!(actual.iter().zip(expected.into_iter().rev()).all(|(l, r)| **l == r))
+        assert!(actual
+            .iter()
+            .zip(expected.into_iter().rev())
+            .all(|(l, r)| **l == r))
     }
 
     #[test]
@@ -709,19 +733,27 @@ mod tests {
             assert_eq!(queue.len(), size);
             assert!(!queue.is_empty());
 
-            let i: i32 = rng.gen_range(0..1000);
-            queue.remove(&i);
-            validate(&queue);
-
-            let mut size = 0;
-            for _ in queue.iter() {
-                size += 1;
-            }
-
             while !queue.is_empty() {
-                queue.pop_last();
+                let i: i32 = rng.gen_range(0..queue.len() as i32);
+                queue.bump(&i);
                 validate(&queue);
-                size -= 1;
+
+                if queue.pop_first().is_some() {
+                    validate(&queue);
+                    size -= 1;
+                }
+
+                if !queue.is_empty() {
+                    let i: i32 = rng.gen_range(0..**queue.tail.as_ref().expect("tail"));
+                    queue.bump(&i);
+                    validate(&queue);
+                }
+
+                if queue.pop_last().is_some() {
+                    validate(&queue);
+                    size -= 1;
+                }
+
                 assert_eq!(queue.len(), size);
             }
 
