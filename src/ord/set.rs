@@ -147,7 +147,7 @@ impl<T> Deref for OrdHashSet<T> {
     }
 }
 
-impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
+impl<T> OrdHashSet<T> {
     /// Construct a new [`OrdHashSet`].
     pub fn new() -> Self {
         Self {
@@ -163,7 +163,9 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
             order: List::with_capacity(capacity),
         }
     }
+}
 
+impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
     fn bisect_hi<Cmp>(&self, cmp: Cmp) -> usize
     where
         Cmp: Fn(&T) -> Option<Ordering>,

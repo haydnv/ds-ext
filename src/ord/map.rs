@@ -182,8 +182,7 @@ impl<K: Clone + Eq + Hash + Ord + fmt::Debug, V: Clone> Clone for OrdHashMap<K, 
         Self { inner, order }
     }
 }
-
-impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
+impl<K, V> OrdHashMap<K, V> {
     /// Construct a new [`OrdHashMap`].
     pub fn new() -> Self {
         Self {
@@ -191,7 +190,6 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
             order: OrdHashSet::new(),
         }
     }
-
     /// Construct a new [`OrdHashMap`] with the given `capacity`.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
@@ -199,7 +197,9 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
             order: OrdHashSet::with_capacity(capacity),
         }
     }
+}
 
+impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
     /// Bisect this map to match a key using the provided comparison, and return its value (if any).
     ///
     /// The first key for which the comparison returns `Some(Ordering::Equal)` will be returned.

@@ -429,7 +429,7 @@ pub struct List<T> {
     inner: Inner<T>,
 }
 
-impl<T: fmt::Debug> List<T> {
+impl<T> List<T> {
     const MAX_LEN: usize = 2 << 31;
 
     /// Create a new empty [`List`].
@@ -445,7 +445,9 @@ impl<T: fmt::Debug> List<T> {
             inner: Inner::with_capacity(capacity),
         }
     }
+}
 
+impl<T: fmt::Debug> List<T> {
     /// Borrow the last element in this [`List`], if any.
     pub fn back(&self) -> Option<&T> {
         let ordinal = if self.len() <= 1 { 0 } else { Self::MAX_LEN };
