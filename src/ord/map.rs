@@ -236,14 +236,6 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
         self.order.clear();
     }
 
-    /// Drain all entries from this [`OrdHashMap`].
-    pub fn drain(&mut self) -> Drain<K, V> {
-        Drain {
-            inner: &mut self.inner,
-            order: self.order.drain(),
-        }
-    }
-
     /// Return `true` if there is an entry for the given `key` in this [`OrdHashMap`].
     pub fn contains_key<Q>(&self, key: &Q) -> bool
     where
@@ -253,11 +245,31 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
         self.inner.contains_key(key)
     }
 
+    /// Drain all entries from this [`OrdHashMap`].
+    pub fn drain(&mut self) -> Drain<K, V> {
+        Drain {
+            inner: &mut self.inner,
+            order: self.order.drain(),
+        }
+    }
+
     /// Consume the `iter` and insert all its elements into this [`OrdHashMap`].
     pub fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
         for (key, value) in iter {
             self.insert(key, value);
         }
+    }
+
+    /// Borrow the first value in this [`OrdHashMap`].
+    pub fn first(&self) -> Option<&V> {
+        let key = self.order.first()?;
+        self.inner.get(&**key)
+    }
+
+    /// Borrow the first value in this [`OrdHashMap`] mutably.
+    pub fn first_mut(&mut self) -> Option<&mut V> {
+        let key = self.order.first()?;
+        self.inner.get_mut(&**key)
     }
 
     /// Borrow the value at the given `key`, if present.
@@ -315,6 +327,18 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
             inner: &self.inner,
             order: self.order.iter(),
         }
+    }
+
+    /// Borrow the last value in this [`OrdHashMap`].
+    pub fn last(&self) -> Option<&V> {
+        let key = self.order.last()?;
+        self.inner.get(&**key)
+    }
+
+    /// Borrow the last value in this [`OrdHashMap`] mutably.
+    pub fn last_mut(&mut self) -> Option<&mut V> {
+        let key = self.order.last()?;
+        self.inner.get_mut(&**key)
     }
 
     /// Return the size of this [`OrdHashMap`].

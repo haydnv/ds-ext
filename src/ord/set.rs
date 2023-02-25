@@ -315,6 +315,11 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
         }
     }
 
+    /// Borrow the first value in this [`OrdHashSet`].
+    pub fn first(&self) -> Option<&Arc<T>> {
+        self.order.front()
+    }
+
     /// Insert a `value` into this [`OrdHashSet`] and return `false` if it was already present.
     pub fn insert(&mut self, value: T) -> bool {
         debug_assert!(self.is_valid());
@@ -349,6 +354,11 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
         Iter {
             inner: self.order.iter(),
         }
+    }
+
+    /// Borrow the last value in this [`OrdHashSet`].
+    pub fn last(&self) -> Option<&Arc<T>> {
+        self.order.back()
     }
 
     /// Remove and return the first value in this [`OrdHashSet`].
