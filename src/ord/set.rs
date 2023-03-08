@@ -35,13 +35,16 @@
 //! );
 //! ```
 
-use core::fmt;
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::HashSet as Inner;
+use std::fmt;
 use std::hash::Hash;
 use std::ops::Deref;
 use std::sync::Arc;
+
+use get_size::GetSize;
+use get_size_derive::*;
 
 use super::list::List;
 
@@ -117,6 +120,7 @@ impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
 /// A [`std::collections::HashSet`] ordered by key using a [`List`].
 ///
 /// This implements `Deref` so that the standard comparison methods are still available.
+#[derive(GetSize)]
 pub struct OrdHashSet<T> {
     inner: Inner<Arc<T>>,
     order: List<Arc<T>>,

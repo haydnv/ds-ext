@@ -7,6 +7,9 @@ use std::fmt;
 use std::hash::Hash;
 use std::sync::Arc;
 
+use get_size::GetSize;
+use get_size_derive::*;
+
 use super::set::OrdHashSet;
 
 /// An iterator to drain the contents of an [`OrdHashMap`]
@@ -162,6 +165,7 @@ impl<'a, K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for Values<'a, K, V> 
 }
 
 /// A [`HashMap`] ordered by key using a [`OrdHashSet`]
+#[derive(GetSize)]
 pub struct OrdHashMap<K, V> {
     inner: Inner<Arc<K>, V>,
     order: OrdHashSet<Arc<K>>,
@@ -196,6 +200,11 @@ impl<K, V> OrdHashMap<K, V> {
             inner: Inner::with_capacity(capacity),
             order: OrdHashSet::with_capacity(capacity),
         }
+    }
+
+    /// Return the size of this [`OrdHashMap`].
+    pub fn len(&self) -> usize {
+        self.inner.len()
     }
 }
 
@@ -325,11 +334,6 @@ impl<K: Eq + Hash + Ord, V> OrdHashMap<K, V> {
         self.inner.get_mut(&**key)
     }
 
-    /// Return the size of this [`OrdHashMap`].
-    pub fn len(&self) -> usize {
-        self.inner.len()
-    }
-
     /// Remove and return the first value in this [`OrdHashMap`].
     pub fn pop_first(&mut self) -> Option<V> {
         let key = self.order.pop_first()?;
@@ -407,6 +411,20 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
         Some((key, value))
     }
 }
+
+impl<K: Eq + Hash + Ord + fmt::Debug, V: PartialEq> PartialEq<Self> for OrdHashMap<K, V> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
+
+        self.iter()
+            .zip(other)
+            .all(|((lk, lv), (rk, rv))| lk == rk && lv == rv)
+    }
+}
+
+impl<K: Eq + Hash + Ord + fmt::Debug, V: Eq> Eq for OrdHashMap<K, V> {}
 
 impl<K: Eq + Hash + Ord + fmt::Debug, V> FromIterator<(K, V)> for OrdHashMap<K, V> {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {

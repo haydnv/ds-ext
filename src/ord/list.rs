@@ -51,6 +51,9 @@ use std::fmt;
 use std::mem;
 use std::ops::{Bound, RangeBounds};
 
+use get_size::GetSize;
+use get_size_derive::*;
+
 use super::tree::Tree;
 
 macro_rules! assert_bounds {
@@ -64,7 +67,7 @@ macro_rules! assert_bounds {
     };
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, GetSize)]
 struct Node<T> {
     value: T,
     prev: Option<usize>,
@@ -83,7 +86,7 @@ impl<T> Node<T> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, GetSize)]
 struct Inner<T> {
     list: HashMap<usize, Node<T>>,
     tree: Tree,
@@ -424,7 +427,7 @@ impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
 }
 
 /// A linked list with cardinal indexing and O(log n) get/insert/remove by index
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, GetSize)]
 pub struct List<T> {
     inner: Inner<T>,
 }
@@ -875,7 +878,7 @@ impl<T: PartialEq> PartialEq for List<T> {
             return false;
         }
 
-        self.iter().zip(other.iter()).all(|(l, r)| *l == *r)
+        self.iter().zip(other).all(|(l, r)| *l == *r)
     }
 }
 

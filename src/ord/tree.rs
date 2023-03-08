@@ -37,6 +37,9 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
 
+use get_size::GetSize;
+use get_size_derive::*;
+
 macro_rules! assert_bounds {
     ($i:expr, $max:expr) => {
         assert!(
@@ -48,7 +51,7 @@ macro_rules! assert_bounds {
     };
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, GetSize)]
 struct Node {
     size: usize,
     left: Option<usize>,
@@ -68,7 +71,7 @@ impl Node {
 type Nodes = HashMap<usize, Node>;
 
 /// A binary search tree which maps cardinal values to ordinal values
-#[derive(Clone)]
+#[derive(Clone, GetSize)]
 pub struct Tree {
     nodes: Nodes,
     root: Option<usize>,
