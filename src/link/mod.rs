@@ -1,5 +1,14 @@
 //! A URI which supports IPv4, IPv6, domain names, and segmented [`Path`](`crate::link::Path`)s.
 
+use std::borrow::Borrow;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::str::FromStr;
+use std::{fmt, iter};
+
+use derive_more::*;
+use get_size::GetSize;
+use get_size_derive::*;
+
 mod id;
 mod path;
 #[cfg(feature = "serialize")]
@@ -9,35 +18,368 @@ mod stream;
 
 pub use id::*;
 pub use path::*;
-use std::fmt;
 
-use derive_more::*;
+/// A port number
+pub type Port = u16;
 
-/// The host component of a [`Link`]
-#[derive(Eq, PartialEq)]
-pub enum Host {
-    // TODO: IPv4
-    // TODO: IPv6
+/// The address of a remove host
+#[derive(Debug, Display, Eq, PartialEq, Hash)]
+pub enum Address {
+    IPv4(Ipv4Addr),
+    IPv6(Ipv6Addr),
     // TODO: international domain names with IDNA: https://docs.rs/idna/0.3.0/idna/
 }
 
-impl fmt::Debug for Host {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        todo!()
+impl GetSize for Address {
+    fn get_size(&self) -> usize {
+        match self {
+            Self::IPv4(_) => 4,
+            Self::IPv6(_) => 16,
+        }
     }
 }
 
-impl fmt::Display for Host {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        todo!()
+impl Clone for Address {
+    fn clone(&self) -> Self {
+        match self {
+            Self::IPv4(addr) => Self::IPv4(*addr),
+            Self::IPv6(addr) => Self::IPv6(*addr),
+        }
     }
 }
 
-/// An HTTP Link with an optional [`Host`] and [`PathBuf`]
-#[derive(Default, Eq, PartialEq)]
+impl From<Ipv4Addr> for Address {
+    fn from(addr: Ipv4Addr) -> Address {
+        Self::IPv4(addr)
+    }
+}
+
+impl From<Ipv6Addr> for Address {
+    fn from(addr: Ipv6Addr) -> Address {
+        Self::IPv6(addr)
+    }
+}
+
+impl From<IpAddr> for Address {
+    fn from(addr: IpAddr) -> Address {
+        match addr {
+            IpAddr::V4(addr) => Self::IPv4(addr),
+            IpAddr::V6(addr) => Self::IPv6(addr),
+        }
+    }
+}
+
+impl PartialEq<Ipv4Addr> for Address {
+    fn eq(&self, other: &Ipv4Addr) -> bool {
+        match self {
+            Self::IPv4(addr) => addr == other,
+            _ => false,
+        }
+    }
+}
+
+impl PartialEq<Ipv6Addr> for Address {
+    fn eq(&self, other: &Ipv6Addr) -> bool {
+        match self {
+            Self::IPv6(addr) => addr == other,
+            _ => false,
+        }
+    }
+}
+
+impl PartialEq<IpAddr> for Address {
+    fn eq(&self, other: &IpAddr) -> bool {
+        use IpAddr::*;
+
+        match other {
+            V4(addr) => self == addr,
+            V6(addr) => self == addr,
+        }
+    }
+}
+
+/// The protocol portion of a [`Link`] (e.g. "http")
+#[derive(Clone, Debug, Hash, Eq, PartialEq, GetSize)]
+pub enum Protocol {
+    HTTP,
+}
+
+impl Default for Protocol {
+    fn default() -> Protocol {
+        Protocol::HTTP
+    }
+}
+
+impl fmt::Display for Protocol {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::HTTP => "http",
+        })
+    }
+}
+
+/// The host component of a [`Link`] (e.g. "http://127.0.0.1:8702")
+#[derive(Clone, Debug, Hash, Eq, PartialEq, GetSize)]
+pub struct LinkHost {
+    protocol: Protocol,
+    address: Address,
+    port: Option<Port>,
+}
+
+impl FromStr for LinkHost {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<LinkHost, ParseError> {
+        if !s.starts_with("http://") {
+            return Err(format!("invalid protocol: {}", s).into());
+        }
+
+        let protocol = Protocol::HTTP;
+
+        let s = &s[7..];
+
+        let (address, port): (Address, Option<u16>) = if s.contains("::") {
+            let mut segments: Vec<&str> = s.split("::").collect();
+            let port: Option<u16> = if segments.last().unwrap().contains(':') {
+                let last_segment: Vec<&str> = segments.pop().unwrap().split(':').collect();
+                if last_segment.len() == 2 {
+                    segments.push(last_segment[0]);
+
+                    let port = last_segment[1].parse().map_err(|cause| {
+                        format!("{} is not a valid port number: {}", last_segment[1], cause)
+                    })?;
+
+                    Some(port)
+                } else {
+                    return Err(format!("invalid IPv6 address: {}", s).into());
+                }
+            } else {
+                None
+            };
+
+            let address = segments.join("::");
+            let address: Ipv6Addr = address.parse().map_err(|cause| {
+                ParseError::from(format!(
+                    "{} is not a valid IPv6 address: {}",
+                    address, cause
+                ))
+            })?;
+
+            (address.into(), port)
+        } else {
+            let (address, port) = if s.contains(':') {
+                let segments: Vec<&str> = s.split(':').collect();
+                if segments.len() == 2 {
+                    let port: u16 = segments[1].parse().map_err(|cause| {
+                        ParseError::from(format!(
+                            "{} is not a valid port number: {}",
+                            segments[1], cause
+                        ))
+                    })?;
+
+                    (segments[0], Some(port))
+                } else {
+                    return Err(format!("invalid network address: {}", s).into());
+                }
+            } else {
+                (s, None)
+            };
+
+            let address: Ipv4Addr = address.parse().map_err(|cause| {
+                ParseError::from(format!(
+                    "{} is not a valid IPv4 address: {}",
+                    address, cause
+                ))
+            })?;
+
+            (address.into(), port)
+        };
+
+        Ok(LinkHost {
+            protocol,
+            address,
+            port,
+        })
+    }
+}
+
+impl fmt::Display for LinkHost {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(port) = self.port {
+            write!(f, "{}://{}:{}", self.protocol, self.address, port)
+        } else {
+            write!(f, "{}://{}", self.protocol, self.address)
+        }
+    }
+}
+
+/// An HTTP Link with an optional [`Address`] and [`PathBuf`]
+#[derive(Default, Eq, PartialEq, GetSize)]
 pub struct Link {
-    host: Option<Host>,
+    host: Option<LinkHost>,
     path: PathBuf,
+}
+
+impl Link {
+    /// Create a new [`Link`] with the given [`LinkHost`] and [`PathBuf`].
+    pub fn new(host: LinkHost, path: PathBuf) -> Self {
+        Self {
+            host: Some(host),
+            path,
+        }
+    }
+
+    /// Consume this [`Link`] and return its [`LinkHost`] and [`PathBuf`].
+    pub fn into_inner(self) -> (Option<LinkHost>, PathBuf) {
+        (self.host, self.path)
+    }
+
+    /// Consume this [`Link`] and return its [`LinkHost`].
+    pub fn into_host(self) -> Option<LinkHost> {
+        self.host
+    }
+
+    /// Consume this [`Link`] and return its [`PathBuf`].
+    pub fn into_path(self) -> PathBuf {
+        self.path
+    }
+
+    /// Borrow this [`Link`]'s [`LinkHost`], if it has one.
+    pub fn host(&self) -> Option<&LinkHost> {
+        self.host.as_ref()
+    }
+
+    /// Borrow this [`Link`]'s path.
+    pub fn path(&self) -> &PathBuf {
+        &self.path
+    }
+
+    /// Borrow this [`Link`]'s path mutably.
+    pub fn path_mut(&mut self) -> &mut PathBuf {
+        &mut self.path
+    }
+
+    /// Append the given [`PathSegment`] to this [`Link`] and return it.
+    pub fn append<S: Into<PathSegment>>(mut self, segment: S) -> Self {
+        self.path = self.path.append(segment);
+        self
+    }
+}
+
+impl Extend<PathSegment> for Link {
+    fn extend<I: IntoIterator<Item = PathSegment>>(&mut self, iter: I) {
+        self.path.extend(iter)
+    }
+}
+
+impl PartialEq<[PathSegment]> for Link {
+    fn eq(&self, other: &[PathSegment]) -> bool {
+        if self.host.is_some() {
+            return false;
+        }
+
+        &self.path == other
+    }
+}
+
+impl PartialEq<String> for Link {
+    fn eq(&self, other: &String) -> bool {
+        self == other.as_str()
+    }
+}
+
+impl PartialEq<str> for Link {
+    fn eq(&self, other: &str) -> bool {
+        let other = other.borrow();
+
+        if other.is_empty() {
+            false
+        } else if other.starts_with('/') {
+            self.host.is_none() && &self.path == other
+        } else if other.ends_with('/') {
+            self.to_string() == other[..other.len() - 1]
+        } else {
+            self.to_string() == other
+        }
+    }
+}
+
+impl From<LinkHost> for Link {
+    fn from(host: LinkHost) -> Link {
+        Link {
+            host: Some(host),
+            path: PathBuf::default(),
+        }
+    }
+}
+
+impl From<PathLabel> for Link {
+    fn from(path: PathLabel) -> Self {
+        PathBuf::from(path).into()
+    }
+}
+
+impl From<PathBuf> for Link {
+    fn from(path: PathBuf) -> Link {
+        Link { host: None, path }
+    }
+}
+
+impl From<(LinkHost, PathBuf)> for Link {
+    fn from(tuple: (LinkHost, PathBuf)) -> Link {
+        let (host, path) = tuple;
+        Link {
+            host: Some(host),
+            path,
+        }
+    }
+}
+
+impl From<(Option<LinkHost>, PathBuf)> for Link {
+    fn from(tuple: (Option<LinkHost>, PathBuf)) -> Link {
+        let (host, path) = tuple;
+        Link { host, path }
+    }
+}
+
+impl FromStr for Link {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Link, ParseError> {
+        if s.starts_with('/') {
+            return Ok(Link {
+                host: None,
+                path: s.parse()?,
+            });
+        } else if !s.starts_with("http://") {
+            return Err(format!("cannot parse {} as a Link: invalid protocol", s).into());
+        }
+
+        let s = if s.ends_with('/') {
+            &s[..s.len() - 1]
+        } else {
+            s
+        };
+
+        let segments: Vec<&str> = s.split('/').collect();
+        if segments.is_empty() {
+            return Err(format!("invalid Link: {}", s).into());
+        }
+
+        let host: LinkHost = segments[..3].join("/").parse()?;
+
+        let segments = &segments[3..];
+
+        let segments = segments
+            .iter()
+            .map(|s| s.parse())
+            .collect::<Result<Vec<PathSegment>, ParseError>>()?;
+
+        Ok(Link {
+            host: Some(host),
+            path: iter::FromIterator::from_iter(segments),
+        })
+    }
 }
 
 impl fmt::Debug for Link {
