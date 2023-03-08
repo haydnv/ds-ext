@@ -7,8 +7,10 @@
 //! The map and set types support a `Key` trait to allow using arbitrary type `T: Key<K>`
 //! to look up an entry with key type `K`.
 
-pub mod ord;
-pub mod path;
+extern crate core;
 
+pub mod link;
+pub mod ord;
+
+pub use link::{Id, Link, Path, PathBuf, PathSegment};
 pub use ord::{LinkedHashMap, List, OrdHashMap, OrdHashSet};
-pub use path::{Host, Id, Link, Path, PathBuf, PathSegment};

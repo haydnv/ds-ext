@@ -11,5 +11,12 @@ readme = "README.md"
 categories = ["data-structures"]
 keywords = ["ordered", "set", "map", "custom", "order"]
 
+[dependencies]
+derive_more = { version = "0.99", features=["display"] }
+get-size = "0.1"
+get-size-derive = "0.1"
+regex = "1.7"
+safecast = { path = "../safecast" }
+
 [dev-dependencies]
 rand = "0.8"
