@@ -5,6 +5,8 @@
 pub mod list;
 pub mod map;
 pub mod queue;
+#[cfg(feature = "serialize")]
+mod serial;
 pub mod set;
 #[cfg(feature = "stream")]
 mod stream;

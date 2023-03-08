@@ -77,7 +77,7 @@ impl<T> Node<T> {
     }
 }
 
-impl<T: fmt::Debug> Node<T> {
+impl<T> Node<T> {
     fn into_value(self) -> T {
         self.value
     }
@@ -276,7 +276,7 @@ struct DrainState {
 }
 
 impl DrainState {
-    fn next<T: fmt::Debug>(&mut self, list: &mut HashMap<usize, Node<T>>) -> Option<T> {
+    fn next<T>(&mut self, list: &mut HashMap<usize, Node<T>>) -> Option<T> {
         let ordinal = self.next?;
         let node = list.remove(&ordinal).expect("node");
 
@@ -295,7 +295,7 @@ impl DrainState {
         Some(node.into_value())
     }
 
-    fn next_back<T: fmt::Debug>(&mut self, list: &mut HashMap<usize, Node<T>>) -> Option<T> {
+    fn next_back<T>(&mut self, list: &mut HashMap<usize, Node<T>>) -> Option<T> {
         let ordinal = self.last?;
         let node = list.remove(&ordinal).expect("node");
 
@@ -349,7 +349,7 @@ pub struct IntoIter<T> {
     state: DrainState,
 }
 
-impl<T: fmt::Debug> Iterator for IntoIter<T> {
+impl<T> Iterator for IntoIter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -361,7 +361,7 @@ impl<T: fmt::Debug> Iterator for IntoIter<T> {
     }
 }
 
-impl<T: fmt::Debug> DoubleEndedIterator for IntoIter<T> {
+impl<T> DoubleEndedIterator for IntoIter<T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.state.next_back(&mut self.inner)
     }
@@ -375,7 +375,7 @@ pub struct Iter<'a, T> {
     stop: Option<usize>,
 }
 
-impl<'a, T: fmt::Debug> Iterator for Iter<'a, T> {
+impl<'a, T> Iterator for Iter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -402,7 +402,7 @@ impl<'a, T: fmt::Debug> Iterator for Iter<'a, T> {
     }
 }
 
-impl<'a, T: fmt::Debug> DoubleEndedIterator for Iter<'a, T> {
+impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         let ordinal = self.stop?;
         let node = self.inner.get(&ordinal).expect("next");
@@ -447,7 +447,7 @@ impl<T> List<T> {
     }
 }
 
-impl<T: fmt::Debug> List<T> {
+impl<T> List<T> {
     /// Borrow the last element in this [`List`], if any.
     pub fn back(&self) -> Option<&T> {
         let ordinal = if self.len() <= 1 { 0 } else { Self::MAX_LEN };
@@ -869,7 +869,7 @@ impl<T: fmt::Debug> List<T> {
     }
 }
 
-impl<T: PartialEq + fmt::Debug> PartialEq for List<T> {
+impl<T: PartialEq> PartialEq for List<T> {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
             return false;
@@ -879,9 +879,9 @@ impl<T: PartialEq + fmt::Debug> PartialEq for List<T> {
     }
 }
 
-impl<T: Eq + fmt::Debug> Eq for List<T> {}
+impl<T: Eq> Eq for List<T> {}
 
-impl<T: fmt::Debug> Extend<T> for List<T> {
+impl<T> Extend<T> for List<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for item in iter.into_iter() {
             self.push_back(item);
@@ -889,7 +889,7 @@ impl<T: fmt::Debug> Extend<T> for List<T> {
     }
 }
 
-impl<T: fmt::Debug> FromIterator<T> for List<T> {
+impl<T> FromIterator<T> for List<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let source = iter.into_iter();
         let mut list = match source.size_hint() {
@@ -906,7 +906,7 @@ impl<T: fmt::Debug> FromIterator<T> for List<T> {
     }
 }
 
-impl<T: fmt::Debug> IntoIterator for List<T> {
+impl<T> IntoIterator for List<T> {
     type Item = T;
     type IntoIter = IntoIter<T>;
 
@@ -926,7 +926,7 @@ impl<T: fmt::Debug> IntoIterator for List<T> {
     }
 }
 
-impl<'a, T: fmt::Debug> IntoIterator for &'a List<T> {
+impl<'a, T> IntoIterator for &'a List<T> {
     type Item = &'a T;
     type IntoIter = Iter<'a, T>;
 

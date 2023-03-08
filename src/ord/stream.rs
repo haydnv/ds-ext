@@ -25,7 +25,7 @@ impl<K, V> Default for LinkedHashMapVisitor<K, V> {
 #[async_trait]
 impl<K, V> de::Visitor for LinkedHashMapVisitor<K, V>
 where
-    K: Hash + Eq + de::FromStream<Context = ()> + fmt::Debug,
+    K: Hash + Eq + de::FromStream<Context = ()>,
     V: de::FromStream<Context = ()>,
     LinkedHashMap<K, V>: Send,
 {
@@ -53,7 +53,7 @@ where
 #[async_trait]
 impl<K, V> de::FromStream for LinkedHashMap<K, V>
 where
-    K: Hash + Eq + de::FromStream<Context = ()> + fmt::Debug + Send + Sync,
+    K: Hash + Eq + de::FromStream<Context = ()> + Send + Sync,
     V: de::FromStream<Context = ()>,
 {
     type Context = ();
@@ -65,7 +65,7 @@ where
 
 impl<'en, K, V> en::IntoStream<'en> for LinkedHashMap<K, V>
 where
-    K: Hash + Eq + fmt::Debug + en::IntoStream<'en> + 'en,
+    K: Hash + Eq + en::IntoStream<'en> + fmt::Debug + 'en,
     V: en::IntoStream<'en> + 'en,
 {
     fn into_stream<E: en::Encoder<'en>>(self, encoder: E) -> Result<E::Ok, E::Error> {
@@ -75,11 +75,11 @@ where
 
 impl<'en, K, V> en::ToStream<'en> for LinkedHashMap<K, V>
 where
-    K: Hash + Eq + fmt::Debug + en::ToStream<'en> + 'en,
+    K: Hash + Eq + en::ToStream<'en> + 'en,
     V: en::ToStream<'en> + 'en,
 {
     fn to_stream<E: en::Encoder<'en>>(&'en self, encoder: E) -> Result<E::Ok, E::Error> {
-        encoder.collect_map(self.iter())
+        encoder.collect_map(self)
     }
 }
 
@@ -96,7 +96,7 @@ impl<T> Default for ListVisitor<T> {
 }
 
 #[async_trait]
-impl<T: de::FromStream<Context = ()> + fmt::Debug> de::Visitor for ListVisitor<T> {
+impl<T: de::FromStream<Context = ()>> de::Visitor for ListVisitor<T> {
     type Value = List<T>;
 
     fn expecting() -> &'static str {
@@ -119,7 +119,7 @@ impl<T: de::FromStream<Context = ()> + fmt::Debug> de::Visitor for ListVisitor<T
 }
 
 #[async_trait]
-impl<T: de::FromStream<Context = ()> + fmt::Debug> de::FromStream for List<T> {
+impl<T: de::FromStream<Context = ()>> de::FromStream for List<T> {
     type Context = ();
 
     async fn from_stream<D: de::Decoder>(_: (), decoder: &mut D) -> Result<Self, D::Error> {
@@ -127,15 +127,15 @@ impl<T: de::FromStream<Context = ()> + fmt::Debug> de::FromStream for List<T> {
     }
 }
 
-impl<'en, T: en::IntoStream<'en> + fmt::Debug + 'en> en::IntoStream<'en> for List<T> {
+impl<'en, T: en::IntoStream<'en> + 'en> en::IntoStream<'en> for List<T> {
     fn into_stream<E: en::Encoder<'en>>(self, encoder: E) -> Result<E::Ok, E::Error> {
         encoder.collect_seq(self)
     }
 }
 
-impl<'en, T: en::ToStream<'en> + fmt::Debug + 'en> en::ToStream<'en> for List<T> {
+impl<'en, T: en::ToStream<'en> + 'en> en::ToStream<'en> for List<T> {
     fn to_stream<E: en::Encoder<'en>>(&'en self, encoder: E) -> Result<E::Ok, E::Error> {
-        encoder.collect_seq(self.iter())
+        encoder.collect_seq(self)
     }
 }
 
@@ -156,7 +156,7 @@ impl<K, V> Default for OrdHashMapVisitor<K, V> {
 #[async_trait]
 impl<K, V> de::Visitor for OrdHashMapVisitor<K, V>
 where
-    K: Ord + Hash + Eq + de::FromStream<Context = ()> + fmt::Debug,
+    K: Ord + Hash + Eq + de::FromStream<Context = ()>,
     V: de::FromStream<Context = ()>,
     OrdHashMap<K, V>: Send,
 {
@@ -184,7 +184,7 @@ where
 #[async_trait]
 impl<K, V> de::FromStream for OrdHashMap<K, V>
 where
-    K: Ord + Hash + Eq + de::FromStream<Context = ()> + fmt::Debug + Send + Sync,
+    K: Ord + Hash + Eq + de::FromStream<Context = ()> + Send + Sync,
     V: de::FromStream<Context = ()>,
 {
     type Context = ();
@@ -196,7 +196,7 @@ where
 
 impl<'en, K, V> en::IntoStream<'en> for OrdHashMap<K, V>
 where
-    K: Ord + Hash + Eq + fmt::Debug + en::IntoStream<'en> + 'en,
+    K: Ord + Hash + Eq + en::IntoStream<'en> + fmt::Debug + 'en,
     V: en::IntoStream<'en> + 'en,
 {
     fn into_stream<E: en::Encoder<'en>>(self, encoder: E) -> Result<E::Ok, E::Error> {
@@ -206,11 +206,11 @@ where
 
 impl<'en, K, V> en::ToStream<'en> for OrdHashMap<K, V>
 where
-    K: Ord + Hash + Eq + fmt::Debug + en::ToStream<'en> + 'en,
+    K: Ord + Hash + Eq + en::ToStream<'en> + fmt::Debug + 'en,
     V: en::ToStream<'en> + 'en,
 {
     fn to_stream<E: en::Encoder<'en>>(&'en self, encoder: E) -> Result<E::Ok, E::Error> {
-        encoder.collect_map(self.iter())
+        encoder.collect_map(self)
     }
 }
 
@@ -229,7 +229,7 @@ impl<T> Default for SetVisitor<T> {
 #[async_trait]
 impl<T> de::Visitor for SetVisitor<T>
 where
-    T: de::FromStream<Context = ()> + Ord + Hash + Eq + fmt::Debug,
+    T: de::FromStream<Context = ()> + Ord + Hash + Eq,
     OrdHashSet<T>: Send + Sync,
 {
     type Value = OrdHashSet<T>;
@@ -256,7 +256,7 @@ where
 #[async_trait]
 impl<T> de::FromStream for OrdHashSet<T>
 where
-    T: de::FromStream<Context = ()> + Ord + Hash + Eq + fmt::Debug + Send + Sync,
+    T: de::FromStream<Context = ()> + Ord + Hash + Eq + Send + Sync,
 {
     type Context = ();
 
@@ -267,7 +267,7 @@ where
 
 impl<'en, T> en::IntoStream<'en> for OrdHashSet<T>
 where
-    T: fmt::Debug + 'en,
+    T: 'en,
     Arc<T>: en::IntoStream<'en>,
 {
     fn into_stream<E: en::Encoder<'en>>(self, encoder: E) -> Result<E::Ok, E::Error> {

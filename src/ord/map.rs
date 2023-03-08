@@ -199,7 +199,7 @@ impl<K, V> OrdHashMap<K, V> {
     }
 }
 
-impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
+impl<K: Eq + Hash + Ord, V> OrdHashMap<K, V> {
     /// Bisect this map to match a key using the provided comparison, and return its value (if any).
     ///
     /// The first key for which the comparison returns `Some(Ordering::Equal)` will be returned.
@@ -212,22 +212,6 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
         self.order
             .bisect(|key| cmp(&*key))
             .map(|key| self.get(&**key).expect("value"))
-    }
-
-    /// Bisect this map to match and remove an entry using the provided comparison.
-    ///
-    /// The first key for which the comparison returns `Some(Ordering::Equal)` will be returned.
-    /// This method assumes that any partially-ordered keys (where `cmp(key).is_none()`) lie at the
-    /// beginning and/or end of the distribution.
-    pub fn bisect_and_remove<Cmp>(&mut self, cmp: Cmp) -> Option<(K, V)>
-    where
-        Cmp: Fn(&K) -> Option<Ordering> + Copy,
-    {
-        let key = self.order.bisect_and_remove(|key| cmp(&*key))?;
-        let value = self.inner.remove(&**key).expect("value");
-        let key = Arc::try_unwrap(key).expect("key");
-        let key = Arc::try_unwrap(key).expect("key");
-        Some((key, value))
     }
 
     /// Remove all entries from this [`OrdHashMap`].
@@ -352,26 +336,10 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
         self.inner.remove(&**key)
     }
 
-    /// Remove and return the first entry in this [`OrdHashMap`].
-    pub fn pop_first_entry(&mut self) -> Option<(K, V)> {
-        let key = self.order.pop_first()?;
-        let (key, value) = self.inner.remove_entry(&**key).expect("entry");
-        let key = Arc::try_unwrap(key).expect("key");
-        Some((key, value))
-    }
-
     /// Remove and return the last value in this [`OrdHashMap`].
     pub fn pop_last(&mut self) -> Option<V> {
         let key = self.order.pop_last()?;
         self.inner.remove(&**key)
-    }
-
-    /// Remove and return the last entry in this [`OrdHashMap`].
-    pub fn pop_last_entry(&mut self) -> Option<(K, V)> {
-        let key = self.order.pop_last()?;
-        let (key, value) = self.inner.remove_entry(&**key).expect("entry");
-        let key = Arc::try_unwrap(key).expect("key");
-        Some((key, value))
     }
 
     /// Remove an entry from this [`OrdHashMap`] and return its value, if present.
@@ -385,6 +353,48 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
         Some(value)
     }
 
+    /// Construct an iterator over the values in this [`OrdHashMap`].
+    pub fn values(&self) -> Values<K, V> {
+        Values {
+            inner: &self.inner,
+            order: self.order.iter(),
+        }
+    }
+}
+
+impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
+    /// Bisect this map to match and remove an entry using the provided comparison.
+    ///
+    /// The first key for which the comparison returns `Some(Ordering::Equal)` will be returned.
+    /// This method assumes that any partially-ordered keys (where `cmp(key).is_none()`) lie at the
+    /// beginning and/or end of the distribution.
+    pub fn bisect_and_remove<Cmp>(&mut self, cmp: Cmp) -> Option<(K, V)>
+    where
+        Cmp: Fn(&K) -> Option<Ordering> + Copy,
+    {
+        let key = self.order.bisect_and_remove(|key| cmp(&*key))?;
+        let value = self.inner.remove(&**key).expect("value");
+        let key = Arc::try_unwrap(key).expect("key");
+        let key = Arc::try_unwrap(key).expect("key");
+        Some((key, value))
+    }
+
+    /// Remove and return the first entry in this [`OrdHashMap`].
+    pub fn pop_first_entry(&mut self) -> Option<(K, V)> {
+        let key = self.order.pop_first()?;
+        let (key, value) = self.inner.remove_entry(&**key).expect("entry");
+        let key = Arc::try_unwrap(key).expect("key");
+        Some((key, value))
+    }
+
+    /// Remove and return the last entry in this [`OrdHashMap`].
+    pub fn pop_last_entry(&mut self) -> Option<(K, V)> {
+        let key = self.order.pop_last()?;
+        let (key, value) = self.inner.remove_entry(&**key).expect("entry");
+        let key = Arc::try_unwrap(key).expect("key");
+        Some((key, value))
+    }
+
     /// Remove and return an entry from this [`OrdHashMap`], if present.
     pub fn remove_entry<Q>(&mut self, key: &Q) -> Option<(K, V)>
     where
@@ -395,14 +405,6 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
         assert!(self.order.remove(&key));
         let key = Arc::try_unwrap(key).expect("key");
         Some((key, value))
-    }
-
-    /// Construct an iterator over the values in this [`OrdHashMap`].
-    pub fn values(&self) -> Values<K, V> {
-        Values {
-            inner: &self.inner,
-            order: self.order.iter(),
-        }
     }
 }
 
@@ -429,6 +431,15 @@ impl<K: Eq + Hash + fmt::Debug, V> IntoIterator for OrdHashMap<K, V> {
             inner: self.inner,
             order: self.order.into_iter(),
         }
+    }
+}
+
+impl<'a, K: Ord + Eq + Hash + fmt::Debug, V> IntoIterator for &'a OrdHashMap<K, V> {
+    type Item = (&'a K, &'a V);
+    type IntoIter = Iter<'a, K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 

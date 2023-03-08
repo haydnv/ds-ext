@@ -73,7 +73,7 @@ pub struct IntoIter<T> {
     inner: super::list::IntoIter<Arc<T>>,
 }
 
-impl<T: fmt::Debug> Iterator for IntoIter<T> {
+impl<T> Iterator for IntoIter<T> {
     type Item = Arc<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -85,7 +85,7 @@ impl<T: fmt::Debug> Iterator for IntoIter<T> {
     }
 }
 
-impl<T: fmt::Debug> DoubleEndedIterator for IntoIter<T> {
+impl<T> DoubleEndedIterator for IntoIter<T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner.next_back()
     }
@@ -96,7 +96,7 @@ pub struct Iter<'a, T> {
     inner: super::list::Iter<'a, Arc<T>>,
 }
 
-impl<'a, T: fmt::Debug> Iterator for Iter<'a, T> {
+impl<'a, T> Iterator for Iter<'a, T> {
     type Item = &'a Arc<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -108,7 +108,7 @@ impl<'a, T: fmt::Debug> Iterator for Iter<'a, T> {
     }
 }
 
-impl<'a, T: fmt::Debug> DoubleEndedIterator for Iter<'a, T> {
+impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner.next_back()
     }
@@ -163,9 +163,16 @@ impl<T> OrdHashSet<T> {
             order: List::with_capacity(capacity),
         }
     }
+
+    /// Construct an iterator over the values in this [`OrdHashSet`].
+    pub fn iter(&self) -> Iter<T> {
+        Iter {
+            inner: self.order.iter(),
+        }
+    }
 }
 
-impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
+impl<T: Eq + Hash + Ord> OrdHashSet<T> {
     fn bisect_hi<Cmp>(&self, cmp: Cmp) -> usize
     where
         Cmp: Fn(&T) -> Option<Ordering>,
@@ -324,8 +331,6 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
 
     /// Insert a `value` into this [`OrdHashSet`] and return `false` if it was already present.
     pub fn insert(&mut self, value: T) -> bool {
-        debug_assert!(self.is_valid());
-
         let new = if self.inner.contains(&value) {
             false
         } else {
@@ -346,16 +351,7 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
             self.inner.insert(value)
         };
 
-        debug_assert!(self.is_valid());
-
         new
-    }
-
-    /// Construct an iterator over the values in this [`OrdHashSet`].
-    pub fn iter(&self) -> Iter<T> {
-        Iter {
-            inner: self.order.iter(),
-        }
     }
 
     /// Borrow the last value in this [`OrdHashSet`].
@@ -365,11 +361,8 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
 
     /// Remove and return the first value in this [`OrdHashSet`].
     pub fn pop_first(&mut self) -> Option<Arc<T>> {
-        debug_assert!(self.is_valid());
-
         if let Some(value) = self.order.pop_front() {
             self.inner.remove(&value);
-            debug_assert!(self.is_valid());
             Some(value)
         } else {
             None
@@ -395,18 +388,18 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
         Arc<T>: Borrow<Q>,
         Q: Eq + Hash + Ord,
     {
-        debug_assert!(self.is_valid());
-
         if self.inner.remove(value) {
             let index = bisect(&self.order, value);
             assert!(self.order.remove(index).expect("removed").borrow() == value);
-            debug_assert!(self.is_valid());
             true
         } else {
             false
         }
     }
+}
 
+impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
+    #[allow(unused)]
     fn is_valid(&self) -> bool {
         assert_eq!(self.inner.len(), self.order.len());
 
@@ -452,7 +445,7 @@ impl<T: Eq + Hash + Ord + fmt::Debug> FromIterator<T> for OrdHashSet<T> {
     }
 }
 
-impl<T: fmt::Debug> IntoIterator for OrdHashSet<T> {
+impl<T> IntoIterator for OrdHashSet<T> {
     type Item = Arc<T>;
     type IntoIter = IntoIter<T>;
 
@@ -463,7 +456,7 @@ impl<T: fmt::Debug> IntoIterator for OrdHashSet<T> {
     }
 }
 
-impl<'a, T: Hash + Ord + fmt::Debug> IntoIterator for &'a OrdHashSet<T> {
+impl<'a, T> IntoIterator for &'a OrdHashSet<T> {
     type Item = &'a Arc<T>;
     type IntoIter = Iter<'a, T>;
 
@@ -475,7 +468,7 @@ impl<'a, T: Hash + Ord + fmt::Debug> IntoIterator for &'a OrdHashSet<T> {
 #[inline]
 fn bisect<T, Q>(list: &List<T>, target: &Q) -> usize
 where
-    T: Borrow<Q> + Ord + fmt::Debug,
+    T: Borrow<Q> + Ord,
     Q: Ord,
 {
     if let Some(front) = list.front() {

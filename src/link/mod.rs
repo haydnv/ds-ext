@@ -2,6 +2,8 @@
 
 mod id;
 mod path;
+#[cfg(feature = "serialize")]
+mod serial;
 #[cfg(feature = "stream")]
 mod stream;
 
