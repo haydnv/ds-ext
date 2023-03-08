@@ -1,6 +1,5 @@
-//! This crate repackages data structures from the Rust standard library
-//! with additional capabilities like fast ordered maps and sets, segmented URL-safe paths,
-//! and `Collection` types with no trait boundaries.
+//! This crate repackages standard data structures with additional capabilities,
+//! like fast ordered maps and sets.
 //!
 //! The ordered collection types use a [`List`] internally for ordering.
 //!
