@@ -1,6 +1,7 @@
 //! A URI which supports IPv4, IPv6, domain names, and segmented [`Path`](`crate::link::Path`)s.
 
 use std::borrow::Borrow;
+use std::cmp::Ordering;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use std::{fmt, iter};
@@ -22,12 +23,63 @@ pub use path::*;
 /// A port number
 pub type Port = u16;
 
+/// The protocol portion of a [`Link`] (e.g. "http")
+#[derive(Clone, Debug, Hash, Eq, PartialEq, GetSize)]
+pub enum Protocol {
+    HTTP,
+}
+
+impl PartialOrd for Protocol {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Protocol {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Self::HTTP, Self::HTTP) => Ordering::Equal,
+        }
+    }
+}
+
+impl Default for Protocol {
+    fn default() -> Protocol {
+        Protocol::HTTP
+    }
+}
+
+impl fmt::Display for Protocol {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::HTTP => "http",
+        })
+    }
+}
+
 /// The address of a remove host
 #[derive(Debug, Display, Eq, PartialEq, Hash)]
 pub enum Address {
     IPv4(Ipv4Addr),
     IPv6(Ipv6Addr),
     // TODO: international domain names with IDNA: https://docs.rs/idna/0.3.0/idna/
+}
+
+impl PartialOrd for Address {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Address {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Self::IPv4(this), Self::IPv4(that)) => this.cmp(that),
+            (Self::IPv6(this), Self::IPv6(that)) => this.cmp(that),
+            (Self::IPv4(_this), _) => Ordering::Less,
+            (Self::IPv6(_this), _) => Ordering::Greater,
+        }
+    }
 }
 
 impl GetSize for Address {
@@ -98,38 +150,18 @@ impl PartialEq<IpAddr> for Address {
     }
 }
 
-/// The protocol portion of a [`Link`] (e.g. "http")
-#[derive(Clone, Debug, Hash, Eq, PartialEq, GetSize)]
-pub enum Protocol {
-    HTTP,
-}
-
-impl Default for Protocol {
-    fn default() -> Protocol {
-        Protocol::HTTP
-    }
-}
-
-impl fmt::Display for Protocol {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(match self {
-            Self::HTTP => "http",
-        })
-    }
-}
-
 /// The host component of a [`Link`] (e.g. "http://127.0.0.1:8702")
 #[derive(Clone, Debug, Hash, Eq, PartialEq, GetSize)]
-pub struct LinkHost {
+pub struct Host {
     protocol: Protocol,
     address: Address,
     port: Option<Port>,
 }
 
-impl FromStr for LinkHost {
+impl FromStr for Host {
     type Err = ParseError;
 
-    fn from_str(s: &str) -> Result<LinkHost, ParseError> {
+    fn from_str(s: &str) -> Result<Host, ParseError> {
         if !s.starts_with("http://") {
             return Err(format!("invalid protocol: {}", s).into());
         }
@@ -195,7 +227,7 @@ impl FromStr for LinkHost {
             (address.into(), port)
         };
 
-        Ok(LinkHost {
+        Ok(Host {
             protocol,
             address,
             port,
@@ -203,7 +235,25 @@ impl FromStr for LinkHost {
     }
 }
 
-impl fmt::Display for LinkHost {
+impl PartialOrd for Host {
+    fn partial_cmp(&self, other: &Host) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Host {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.protocol.cmp(&other.protocol) {
+            Ordering::Equal => match self.address.cmp(&other.address) {
+                Ordering::Equal => self.port.cmp(&other.port),
+                ordering => ordering,
+            },
+            ordering => ordering,
+        }
+    }
+}
+
+impl fmt::Display for Host {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(port) = self.port {
             write!(f, "{}://{}:{}", self.protocol, self.address, port)
@@ -216,26 +266,26 @@ impl fmt::Display for LinkHost {
 /// An HTTP Link with an optional [`Address`] and [`PathBuf`]
 #[derive(Default, Eq, PartialEq, GetSize)]
 pub struct Link {
-    host: Option<LinkHost>,
+    host: Option<Host>,
     path: PathBuf,
 }
 
 impl Link {
-    /// Create a new [`Link`] with the given [`LinkHost`] and [`PathBuf`].
-    pub fn new(host: LinkHost, path: PathBuf) -> Self {
+    /// Create a new [`Link`] with the given [`Host`] and [`PathBuf`].
+    pub fn new(host: Host, path: PathBuf) -> Self {
         Self {
             host: Some(host),
             path,
         }
     }
 
-    /// Consume this [`Link`] and return its [`LinkHost`] and [`PathBuf`].
-    pub fn into_inner(self) -> (Option<LinkHost>, PathBuf) {
+    /// Consume this [`Link`] and return its [`Host`] and [`PathBuf`].
+    pub fn into_inner(self) -> (Option<Host>, PathBuf) {
         (self.host, self.path)
     }
 
-    /// Consume this [`Link`] and return its [`LinkHost`].
-    pub fn into_host(self) -> Option<LinkHost> {
+    /// Consume this [`Link`] and return its [`Host`].
+    pub fn into_host(self) -> Option<Host> {
         self.host
     }
 
@@ -244,8 +294,8 @@ impl Link {
         self.path
     }
 
-    /// Borrow this [`Link`]'s [`LinkHost`], if it has one.
-    pub fn host(&self) -> Option<&LinkHost> {
+    /// Borrow this [`Link`]'s [`Host`], if it has one.
+    pub fn host(&self) -> Option<&Host> {
         self.host.as_ref()
     }
 
@@ -304,8 +354,8 @@ impl PartialEq<str> for Link {
     }
 }
 
-impl From<LinkHost> for Link {
-    fn from(host: LinkHost) -> Link {
+impl From<Host> for Link {
+    fn from(host: Host) -> Link {
         Link {
             host: Some(host),
             path: PathBuf::default(),
@@ -325,8 +375,8 @@ impl From<PathBuf> for Link {
     }
 }
 
-impl From<(LinkHost, PathBuf)> for Link {
-    fn from(tuple: (LinkHost, PathBuf)) -> Link {
+impl From<(Host, PathBuf)> for Link {
+    fn from(tuple: (Host, PathBuf)) -> Link {
         let (host, path) = tuple;
         Link {
             host: Some(host),
@@ -335,8 +385,8 @@ impl From<(LinkHost, PathBuf)> for Link {
     }
 }
 
-impl From<(Option<LinkHost>, PathBuf)> for Link {
-    fn from(tuple: (Option<LinkHost>, PathBuf)) -> Link {
+impl From<(Option<Host>, PathBuf)> for Link {
+    fn from(tuple: (Option<Host>, PathBuf)) -> Link {
         let (host, path) = tuple;
         Link { host, path }
     }
@@ -366,7 +416,7 @@ impl FromStr for Link {
             return Err(format!("invalid Link: {}", s).into());
         }
 
-        let host: LinkHost = segments[..3].join("/").parse()?;
+        let host: Host = segments[..3].join("/").parse()?;
 
         let segments = &segments[3..];
 
@@ -379,6 +429,26 @@ impl FromStr for Link {
             host: Some(host),
             path: iter::FromIterator::from_iter(segments),
         })
+    }
+}
+
+impl PartialOrd for Link {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Link {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (&self.host, &other.host) {
+            (None, None) => self.path.cmp(&other.path),
+            (Some(this), Some(that)) => match this.cmp(&that) {
+                Ordering::Equal => self.path.cmp(&other.path),
+                ordering => ordering,
+            },
+            (Some(_), _) => Ordering::Less,
+            (_, Some(_)) => Ordering::Greater,
+        }
     }
 }
 
