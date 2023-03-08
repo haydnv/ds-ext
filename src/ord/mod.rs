@@ -2,6 +2,8 @@
 //!
 //! [`List`] itself is ordered using a [`Tree`].
 
+#[cfg(feature = "hash")]
+mod hash;
 pub mod list;
 pub mod map;
 pub mod queue;

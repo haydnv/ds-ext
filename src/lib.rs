@@ -6,7 +6,9 @@
 //! The map and set types support a `Key` trait to allow using arbitrary type `T: Key<K>`
 //! to look up an entry with key type `K`.
 //!
-//! Use the "stream" feature to enable support for [`destream`](https://docs.rs/destream/latest/destream/).
+//! Use the "serialize" feature to enable support for [`serde`](https://docs.rs/serde/).
+//! Use the "stream" feature to enable support for [`destream`](https://docs.rs/destream/).
+//! Use the "hash" feature to enable support for [`async-hash`](https://docs.rs/async-hash/).
 
 extern crate core;
 

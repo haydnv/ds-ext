@@ -88,6 +88,20 @@ impl Id {
     }
 }
 
+#[cfg(feature = "hash")]
+impl<D: async_hash::Digest> async_hash::Hash<D> for Id {
+    fn hash(self) -> async_hash::Output<D> {
+        async_hash::Hash::<D>::hash(self.as_str())
+    }
+}
+
+#[cfg(feature = "hash")]
+impl<'a, D: async_hash::Digest> async_hash::Hash<D> for &'a Id {
+    fn hash(self) -> async_hash::Output<D> {
+        async_hash::Hash::<D>::hash(self.as_str())
+    }
+}
+
 impl Borrow<str> for Id {
     fn borrow(&self) -> &str {
         &self.inner

@@ -12,11 +12,13 @@ categories = ["data-structures"]
 keywords = ["ordered", "set", "map", "custom", "order"]
 
 [features]
-all = ["stream", "serialize"]
+all = ["hash", "stream", "serialize"]
+hash = ["async-hash"]
 stream = ["async-trait", "destream"]
 serialize = ["serde"]
 
 [dependencies]
+async-hash = { version = "0.4", optional = true }
 async-trait = { version = "0.1", optional = true }
 derive_more = { version = "0.99", features=["display"] }
 destream = { path = "../destream", optional = true }

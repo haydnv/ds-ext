@@ -154,6 +154,24 @@ impl<Idx: std::slice::SliceIndex<[PathSegment]>> std::ops::Index<Idx> for PathBu
     }
 }
 
+#[cfg(feature = "hash")]
+impl<D: async_hash::Digest> async_hash::Hash<D> for PathBuf {
+    fn hash(self) -> async_hash::Output<D> {
+        async_hash::Hash::<D>::hash(&self)
+    }
+}
+
+#[cfg(feature = "hash")]
+impl<'a, D: async_hash::Digest> async_hash::Hash<D> for &'a PathBuf {
+    fn hash(self) -> async_hash::Output<D> {
+        if self == &PathBuf::default() {
+            return async_hash::default_hash::<D>();
+        } else {
+            async_hash::Hash::<D>::hash(self.to_string())
+        }
+    }
+}
+
 impl PartialEq<String> for PathBuf {
     fn eq(&self, other: &String) -> bool {
         self == other.as_str()
