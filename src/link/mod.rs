@@ -2,6 +2,8 @@
 
 mod id;
 mod path;
+#[cfg(feature = "stream")]
+mod stream;
 
 pub use id::*;
 pub use path::*;

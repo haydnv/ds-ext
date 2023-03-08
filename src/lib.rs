@@ -6,6 +6,8 @@
 //!
 //! The map and set types support a `Key` trait to allow using arbitrary type `T: Key<K>`
 //! to look up an entry with key type `K`.
+//!
+//! Use the "stream" feature to enable support for [`destream`](https://docs.rs/destream/latest/destream/).
 
 extern crate core;
 

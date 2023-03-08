@@ -6,6 +6,8 @@ pub mod list;
 pub mod map;
 pub mod queue;
 pub mod set;
+#[cfg(feature = "stream")]
+mod stream;
 mod tree;
 
 pub use list::List;
