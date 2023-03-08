@@ -24,7 +24,7 @@ pub use path::*;
 pub type Port = u16;
 
 /// The protocol portion of a [`Link`] (e.g. "http")
-#[derive(Clone, Debug, Hash, Eq, PartialEq, GetSize)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, GetSize)]
 pub enum Protocol {
     HTTP,
 }
@@ -58,7 +58,7 @@ impl fmt::Display for Protocol {
 }
 
 /// The address of a remove host
-#[derive(Debug, Display, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Display, Eq, PartialEq, Hash)]
 pub enum Address {
     IPv4(Ipv4Addr),
     IPv6(Ipv6Addr),
@@ -87,15 +87,6 @@ impl GetSize for Address {
         match self {
             Self::IPv4(_) => 4,
             Self::IPv6(_) => 16,
-        }
-    }
-}
-
-impl Clone for Address {
-    fn clone(&self) -> Self {
-        match self {
-            Self::IPv4(addr) => Self::IPv4(*addr),
-            Self::IPv6(addr) => Self::IPv6(*addr),
         }
     }
 }
@@ -264,7 +255,7 @@ impl fmt::Display for Host {
 }
 
 /// An HTTP Link with an optional [`Address`] and [`PathBuf`]
-#[derive(Default, Eq, PartialEq, GetSize)]
+#[derive(Clone, Default, Eq, PartialEq, GetSize)]
 pub struct Link {
     host: Option<Host>,
     path: PathBuf,
