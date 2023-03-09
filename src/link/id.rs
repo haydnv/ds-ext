@@ -172,6 +172,12 @@ impl TryCastFrom<String> for Id {
     }
 }
 
+impl From<Id> for String {
+    fn from(id: Id) -> String {
+        id.inner
+    }
+}
+
 impl TryCastFrom<Id> for usize {
     fn can_cast_from(id: &Id) -> bool {
         id.as_str().parse::<usize>().is_ok()
