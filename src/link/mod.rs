@@ -244,6 +244,39 @@ impl Ord for Host {
     }
 }
 
+impl From<(Protocol, Address)> for Host {
+    fn from(components: (Protocol, Address)) -> Self {
+        let (protocol, address) = components;
+        Self {
+            protocol,
+            address,
+            port: None,
+        }
+    }
+}
+
+impl From<(Protocol, Address, Port)> for Host {
+    fn from(components: (Protocol, Address, Port)) -> Self {
+        let (protocol, address, port) = components;
+        Self {
+            protocol,
+            address,
+            port: Some(port),
+        }
+    }
+}
+
+impl From<(Protocol, Address, Option<Port>)> for Host {
+    fn from(components: (Protocol, Address, Option<Port>)) -> Self {
+        let (protocol, address, port) = components;
+        Self {
+            protocol,
+            address,
+            port,
+        }
+    }
+}
+
 impl fmt::Display for Host {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(port) = self.port {

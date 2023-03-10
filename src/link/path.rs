@@ -1,9 +1,8 @@
 //! A segmented [`Path`] safe to use as a filesystem [`std::path::Path`] or in a [`super::Link`].
 
-use core::fmt;
-use std::iter;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
+use std::{fmt, iter};
 
 use get_size::GetSize;
 use get_size_derive::*;
@@ -93,17 +92,25 @@ impl<'a, Idx: std::slice::SliceIndex<[PathSegment]>> std::ops::Index<Idx> for Pa
     }
 }
 
+impl<'a> fmt::Debug for Path<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
 impl<'a> fmt::Display for Path<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "/{}",
-            self.inner
-                .iter()
-                .map(|s| s.to_string())
-                .collect::<Vec<String>>()
-                .join("/")
-        )
+        f.write_str("/")?;
+
+        for i in 0..self.len() {
+            write!(f, "{}", self[i])?;
+
+            if i < self.len() - 1 {
+                f.write_str("/")?;
+            }
+        }
+
+        Ok(())
     }
 }
 

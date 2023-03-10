@@ -1,6 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use super::{Id, Link, PathBuf};
+use super::{Host, Id, Link, PathBuf};
 
 impl<'de> Deserialize<'de> for Id {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -12,6 +12,19 @@ impl<'de> Deserialize<'de> for Id {
 impl Serialize for Id {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.as_str().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Host {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let inner: &str = Deserialize::deserialize(deserializer)?;
+        inner.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for Host {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.to_string().serialize(serializer)
     }
 }
 
