@@ -102,6 +102,26 @@ impl<'a, D: async_hash::Digest> async_hash::Hash<D> for &'a Id {
     }
 }
 
+#[cfg(feature = "hash")]
+impl<T, U> From<async_hash::generic_array::GenericArray<T, U>> for Id
+where
+    U: async_hash::generic_array::ArrayLength<T>,
+    async_hash::generic_array::GenericArray<T, U>: AsRef<[u8]>,
+{
+    fn from(hash: async_hash::generic_array::GenericArray<T, U>) -> Self {
+        hex::encode(hash).parse().expect("hash")
+    }
+}
+
+#[cfg(feature = "uuid")]
+impl From<uuid::Uuid> for Id {
+    fn from(id: uuid::Uuid) -> Self {
+        Self {
+            inner: id.to_string(),
+        }
+    }
+}
+
 impl Borrow<str> for Id {
     fn borrow(&self) -> &str {
         &self.inner

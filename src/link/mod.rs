@@ -255,7 +255,7 @@ impl fmt::Display for Host {
 }
 
 /// An HTTP Link with an optional [`Address`] and [`PathBuf`]
-#[derive(Clone, Default, Eq, PartialEq, GetSize)]
+#[derive(Clone, Default, Eq, Hash, PartialEq, GetSize)]
 pub struct Link {
     host: Option<Host>,
     path: PathBuf,
