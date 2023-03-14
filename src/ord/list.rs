@@ -684,7 +684,7 @@ impl<T> List<T> {
 
                         if let Some(prev) = node.prev {
                             if let Some(next) = node.next {
-                                if ordinal - prev <= next - ordinal {
+                                if ordinal - prev < next - ordinal {
                                     break node;
                                 }
                             }
@@ -696,6 +696,7 @@ impl<T> List<T> {
                     };
 
                     let next = insert_after.next.expect("next");
+
                     (ordinal, ordinal + ((next - ordinal) >> 1), next)
                 };
 
@@ -745,7 +746,7 @@ impl<T> List<T> {
                         debug_assert_eq!(ordinal + next_gap, next);
                         debug_assert!(self.inner.list.contains_key(&(ordinal + next_gap)));
 
-                        if next_gap <= gap {
+                        if next_gap < gap {
                             break;
                         } else {
                             gap = next_gap;
@@ -884,6 +885,16 @@ impl<T: PartialEq> PartialEq for List<T> {
 
 impl<T: Eq> Eq for List<T> {}
 
+impl<T: PartialEq> PartialEq<Vec<T>> for List<T> {
+    fn eq(&self, other: &Vec<T>) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
+
+        self.iter().zip(other).all(|(l, r)| l == r)
+    }
+}
+
 impl<T> Extend<T> for List<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for item in iter.into_iter() {
@@ -972,5 +983,23 @@ mod tests {
                 assert_eq!(vector[i], *list.get(i).expect("item"));
             }
         }
+    }
+
+    #[test]
+    fn test_ordered_list() {
+        let expected = Vec::from_iter(0..100);
+        let actual = List::from_iter(0..100);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_reversed_list() {
+        let expected = Vec::from_iter((0..100).rev());
+        let mut actual = List::with_capacity(100);
+        for i in 0..100 {
+            actual.push_front(i);
+        }
+
+        assert_eq!(actual, expected);
     }
 }
