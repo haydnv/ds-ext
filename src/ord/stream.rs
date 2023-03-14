@@ -35,14 +35,15 @@ where
         "a LinkedHashMap"
     }
 
-    async fn visit_seq<A: de::SeqAccess>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        let mut map = if let Some(size_hint) = seq.size_hint() {
+    async fn visit_map<A: de::MapAccess>(self, mut access: A) -> Result<Self::Value, A::Error> {
+        let mut map = if let Some(size_hint) = access.size_hint() {
             LinkedHashMap::with_capacity(size_hint)
         } else {
             LinkedHashMap::new()
         };
 
-        while let Some((key, value)) = seq.next_element(()).await? {
+        while let Some(key) = access.next_key(()).await? {
+            let value = access.next_value(()).await?;
             map.insert(key, value);
         }
 
@@ -59,7 +60,7 @@ where
     type Context = ();
 
     async fn from_stream<D: de::Decoder>(_: (), decoder: &mut D) -> Result<Self, D::Error> {
-        decoder.decode_seq(LinkedHashMapVisitor::default()).await
+        decoder.decode_map(LinkedHashMapVisitor::default()).await
     }
 }
 
@@ -166,14 +167,15 @@ where
         "an ordered HashMap"
     }
 
-    async fn visit_seq<A: de::SeqAccess>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        let mut map = if let Some(size_hint) = seq.size_hint() {
+    async fn visit_map<A: de::MapAccess>(self, mut access: A) -> Result<Self::Value, A::Error> {
+        let mut map = if let Some(size_hint) = access.size_hint() {
             OrdHashMap::with_capacity(size_hint)
         } else {
             OrdHashMap::new()
         };
 
-        while let Some((key, value)) = seq.next_element(()).await? {
+        while let Some(key) = access.next_key(()).await? {
+            let value = access.next_value(()).await?;
             map.insert(key, value);
         }
 
@@ -190,7 +192,7 @@ where
     type Context = ();
 
     async fn from_stream<D: de::Decoder>(_: (), decoder: &mut D) -> Result<Self, D::Error> {
-        decoder.decode_seq(OrdHashMapVisitor::default()).await
+        decoder.decode_map(OrdHashMapVisitor::default()).await
     }
 }
 
