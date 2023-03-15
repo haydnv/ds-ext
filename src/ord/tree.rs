@@ -98,6 +98,8 @@ impl Tree {
     pub fn clear(&mut self) {
         self.nodes.clear();
         self.root = None;
+
+        debug_assert_eq!(self.size(), 0);
     }
 
     /// Return `true` if this [`Tree`] has zero nodes.

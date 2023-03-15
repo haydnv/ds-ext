@@ -110,6 +110,8 @@ impl<T> Inner<T> {
     fn clear(&mut self) {
         self.list.clear();
         self.tree.clear();
+
+        debug_assert!(self.is_valid());
     }
 
     fn get(&self, ordinal: &usize) -> &Node<T> {
@@ -159,10 +161,12 @@ impl<T> Inner<T> {
     }
 
     fn is_empty(&self) -> bool {
+        debug_assert_eq!(self.list.is_empty(), self.tree.is_empty());
         self.list.is_empty()
     }
 
     fn len(&self) -> usize {
+        debug_assert_eq!(self.list.len(), self.tree.size());
         self.list.len()
     }
 
@@ -279,9 +283,9 @@ struct DrainState {
 }
 
 impl DrainState {
-    fn next<T>(&mut self, list: &mut HashMap<usize, Node<T>>) -> Option<T> {
+    fn next<T>(&mut self, inner: &mut Inner<T>) -> Option<T> {
         let ordinal = self.next?;
-        let node = list.remove(&ordinal).expect("node");
+        let node = inner.remove(ordinal);
 
         self.size -= 1;
 
@@ -298,9 +302,9 @@ impl DrainState {
         Some(node.into_value())
     }
 
-    fn next_back<T>(&mut self, list: &mut HashMap<usize, Node<T>>) -> Option<T> {
+    fn next_back<T>(&mut self, inner: &mut Inner<T>) -> Option<T> {
         let ordinal = self.last?;
-        let node = list.remove(&ordinal).expect("node");
+        let node = inner.remove(ordinal);
 
         self.size -= 1;
 
@@ -324,7 +328,7 @@ impl DrainState {
 
 /// An iterator to drain the contents of a [`List`]
 pub struct Drain<'a, T> {
-    inner: &'a mut HashMap<usize, Node<T>>,
+    inner: &'a mut Inner<T>,
     state: DrainState,
 }
 
@@ -348,7 +352,7 @@ impl<'a, T: fmt::Debug> DoubleEndedIterator for Drain<'a, T> {
 
 /// An iterator over the contents of a [`List`]
 pub struct IntoIter<T> {
-    inner: HashMap<usize, Node<T>>,
+    inner: Inner<T>,
     state: DrainState,
 }
 
@@ -465,21 +469,22 @@ impl<T> List<T> {
 
     /// Remove all elements from this [`List`].
     pub fn clear(&mut self) {
-        self.inner.clear()
+        self.inner.clear();
+        debug_assert!(self.inner.is_valid());
     }
 
     /// Drain all elements from this [`List`].
     pub fn drain(&mut self) -> Drain<T> {
-        let next = if self.is_empty() { None } else { Some(0) };
         let size = self.len();
-        let last = if self.len() == 1 {
-            Some(0)
-        } else {
-            Some(Self::MAX_LEN)
+        let next = if size == 0 { None } else { Some(0) };
+        let last = match size {
+            0 => None,
+            1 => Some(0),
+            _ => Some(Self::MAX_LEN),
         };
 
         Drain {
-            inner: &mut self.inner.list,
+            inner: &mut self.inner,
             state: DrainState { size, next, last },
         }
     }
@@ -934,7 +939,7 @@ impl<T> IntoIterator for List<T> {
         };
 
         IntoIter {
-            inner: self.inner.list,
+            inner: self.inner,
             state: DrainState { size, next, last },
         }
     }
