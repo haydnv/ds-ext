@@ -5,7 +5,7 @@ authors = ["code@tinychain.net"]
 edition = "2021"
 license = "Apache-2.0"
 description = "Extensions to standard Rust data structures which provide additional capabilities"
-repository = "https://github.com/haydnv/freqache"
+repository = "https://github.com/haydnv/ds-ext"
 readme = "README.md"
 
 categories = ["data-structures"]
@@ -18,7 +18,7 @@ stream = ["async-trait", "destream"]
 serialize = ["serde"]
 
 [dependencies]
-async-hash = { version = "0.4", optional = true }
+async-hash = { path = "../async-hash", optional = true }
 async-trait = { version = "0.1", optional = true }
 derive_more = { version = "0.99", features=["display"] }
 destream = { path = "../destream", optional = true }
