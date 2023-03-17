@@ -400,6 +400,23 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
             false
         }
     }
+
+    /// Return `true` if the first elements in this set are equal to those in the given `iter`.
+    pub fn starts_with<'a, I: IntoIterator<Item = &'a T>>(&'a self, other: I) -> bool
+    where
+        T: PartialEq,
+    {
+        let mut this = self.iter();
+        let mut that = other.into_iter();
+
+        while let Some(item) = that.next() {
+            if this.next().map(|arc| &**arc) != Some(item) {
+                return false;
+            }
+        }
+
+        true
+    }
 }
 
 impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {

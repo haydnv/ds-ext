@@ -357,6 +357,24 @@ impl<K: Eq + Hash + Ord, V> OrdHashMap<K, V> {
         Some(value)
     }
 
+    /// Return `true` if the first elements in this [`OrdHashMap`] equal those in the given `iter`.
+    pub fn starts_with<'a, I: IntoIterator<Item = (&'a K, &'a V)>>(&self, other: I) -> bool
+    where
+        K: fmt::Debug + 'a,
+        V: PartialEq + 'a,
+    {
+        let mut this = self.iter();
+        let mut that = other.into_iter();
+
+        while let Some(item) = that.next() {
+            if this.next() != Some(item) {
+                return false;
+            }
+        }
+
+        true
+    }
+
     /// Construct an iterator over the values in this [`OrdHashMap`].
     pub fn values(&self) -> Values<K, V> {
         Values {

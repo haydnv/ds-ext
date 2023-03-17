@@ -842,6 +842,23 @@ impl<T> List<T> {
         Some(node.into_value())
     }
 
+    /// Return `true` if the first elements in this [`List`] are equal to those in the given `iter`.
+    pub fn starts_with<'a, I: IntoIterator<Item = &'a T>>(&'a self, other: I) -> bool
+    where
+        T: PartialEq,
+    {
+        let mut this = self.iter();
+        let mut that = other.into_iter();
+
+        while let Some(item) = that.next() {
+            if this.next() != Some(item) {
+                return false;
+            }
+        }
+
+        true
+    }
+
     /// Swap the value at `from` with the value at `to`.
     pub fn swap(&mut self, from: usize, to: usize) {
         assert_bounds!(from, self.len());
