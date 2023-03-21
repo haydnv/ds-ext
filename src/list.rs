@@ -12,7 +12,7 @@
 //!
 //! Example:
 //! ```
-//! use ds_ext::ord::List;
+//! use ds_ext::List;
 //!
 //! let mut list = List::new();
 //!

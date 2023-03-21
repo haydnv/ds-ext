@@ -2,7 +2,7 @@
 //!
 //! Example usage:
 //! ```
-//! use ds_ext::ord::Tree;
+//! use ds_ext::Tree;
 //!
 //! let mut tree = Tree::new();
 //! tree.insert(1);

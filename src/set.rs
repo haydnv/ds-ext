@@ -4,7 +4,7 @@
 //! ```
 //! use std::sync::Arc;
 //!
-//! use ds_ext::ord::OrdHashSet;
+//! use ds_ext::OrdHashSet;
 //!
 //! let mut set1 = OrdHashSet::new();
 //! assert!(set1.insert("d"));
