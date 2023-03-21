@@ -10,14 +10,14 @@ use derive_more::*;
 use get_size::GetSize;
 use get_size_derive::*;
 
-mod id;
+pub use hr_id::{label, Id, Label, ParseError};
+
 mod path;
 #[cfg(feature = "serialize")]
 mod serial;
 #[cfg(feature = "stream")]
 mod stream;
 
-pub use id::*;
 pub use path::*;
 
 /// A port number
@@ -476,6 +476,21 @@ impl Ord for Link {
     }
 }
 
+impl TryFrom<Link> for PathBuf {
+    type Error = ParseError;
+
+    fn try_from(link: Link) -> Result<Self, Self::Error> {
+        if link.host.is_none() {
+            Ok(link.path)
+        } else {
+            Err(ParseError::from(format!(
+                "expected a path but found {}",
+                link
+            )))
+        }
+    }
+}
+
 impl fmt::Debug for Link {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(host) = &self.host {
@@ -510,26 +525,6 @@ impl<'a, D: async_hash::Digest> async_hash::Hash<D> for &'a Link {
             async_hash::default_hash::<D>()
         } else {
             async_hash::Hash::<D>::hash(self.to_string())
-        }
-    }
-}
-
-#[derive(Debug, Display, Error)]
-#[display(fmt = "{}", msg)]
-pub struct ParseError {
-    msg: String,
-}
-
-impl From<String> for ParseError {
-    fn from(msg: String) -> Self {
-        Self { msg }
-    }
-}
-
-impl From<&str> for ParseError {
-    fn from(msg: &str) -> Self {
-        Self {
-            msg: msg.to_string(),
         }
     }
 }

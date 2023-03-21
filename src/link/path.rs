@@ -7,8 +7,7 @@ use std::{fmt, iter};
 use get_size::GetSize;
 use get_size_derive::*;
 
-use super::id::{label, Id, Label};
-use super::ParseError;
+use super::{label, Id, Label, ParseError};
 
 /// A segment of a [`Path`]
 pub type PathSegment = Id;
