@@ -18,14 +18,14 @@ stream = ["async-trait", "destream"]
 serialize = ["serde"]
 
 [dependencies]
-async-hash = { path = "../async-hash", optional = true }
+async-hash = { version = "0.5", optional = true }
 async-trait = { version = "0.1", optional = true }
 derive_more = { version = "0.99", features=["display"] }
-destream = { path = "../destream", optional = true }
+destream = { version = "0.7", optional = true }
 get-size = "0.1"
 get-size-derive = "0.1"
 hex = { version = "0.4", optional = true }
-safecast = { path = "../safecast" }
+safecast = "0.2"
 serde = { version = "1.0", optional = true }
 
 [dev-dependencies]
