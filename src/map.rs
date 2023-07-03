@@ -138,6 +138,32 @@ impl<'a, K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for Keys<'a, K, V> {
     }
 }
 
+/// An owned iterator over the values in an [`OrdHashMap`]
+pub struct IntoValues<K, V> {
+    inner: Inner<Arc<K>, V>,
+    order: super::set::IntoIter<Arc<K>>,
+}
+
+impl<K: Eq + Hash + fmt::Debug, V> Iterator for IntoValues<K, V> {
+    type Item = V;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let key = self.order.next()?;
+        self.inner.remove(&**key)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.order.size_hint()
+    }
+}
+
+impl<K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for IntoValues<K, V> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let key = self.order.next_back()?;
+        self.inner.remove(&**key)
+    }
+}
+
 /// An iterator over the values in an [`OrdHashMap`]
 pub struct Values<'a, K, V> {
     inner: &'a Inner<Arc<K>, V>,
@@ -373,6 +399,14 @@ impl<K: Eq + Hash + Ord, V> OrdHashMap<K, V> {
         }
 
         true
+    }
+
+    /// Construct an owned iterator over the values in this [`OrdHashMap`].
+    pub fn into_values(self) -> IntoValues<K, V> {
+        IntoValues {
+            inner: self.inner,
+            order: self.order.into_iter(),
+        }
     }
 
     /// Construct an iterator over the values in this [`OrdHashMap`].
