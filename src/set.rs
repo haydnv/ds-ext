@@ -188,7 +188,7 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
         }
 
         let mut lo = 0;
-        let mut hi = 1;
+        let mut hi = self.len();
 
         while lo < hi {
             let mid = (lo + hi) >> 1;

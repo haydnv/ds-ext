@@ -530,6 +530,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_find() {
+        let mut map = OrdHashMap::<&str, u32>::new();
+        map.insert(".tmp", 0);
+        map.insert("1", 1);
+        map.insert("2", 2);
+        map.insert("3", 3);
+        map.insert("five", 5);
+        map.insert("six", 6);
+
+        assert_eq!(
+            map.bisect(|key| key.parse().ok().map(|key: u32| 1.cmp(&key))),
+            Some(&1)
+        );
+
+        assert_eq!(
+            map.bisect(|key| key.parse().ok().map(|key: u32| 2.cmp(&key))),
+            Some(&2)
+        );
+
+        assert_eq!(
+            map.bisect(|key| key.parse().ok().map(|key: u32| 3.cmp(&key))),
+            Some(&3)
+        );
+    }
+
+    #[test]
     fn test_drain() {
         let mut map: OrdHashMap<u32, String> =
             (0..10).into_iter().map(|i| (i, i.to_string())).collect();
