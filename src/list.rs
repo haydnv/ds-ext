@@ -127,6 +127,8 @@ impl<T> Inner<T> {
     }
 
     fn insert(&mut self, ordinal: usize, node: Node<T>) {
+        debug_assert!(self.is_valid());
+
         debug_assert!(
             !self.list.contains_key(&ordinal),
             "there is already an entry at {}",
@@ -553,50 +555,60 @@ impl<T> List<T> {
                 2 => self.push_back(value),
                 i => panic!("cannot insert at index {} in a list of length {}", i, 2),
             },
-            len => match index {
-                0 => self.push_front(value),
-                i if i == len => self.push_back(value),
-                i if i == len - 1 => {
-                    let next_ordinal = self.ordinal(i);
-                    let next = self.inner.get(&next_ordinal);
-                    let prev_ordinal = next.prev.expect("prev");
-                    let ordinal = prev_ordinal + ((next_ordinal - prev_ordinal) >> 1);
+            len => {
+                match index {
+                    0 => self.push_front(value),
+                    i if i == len => self.push_back(value),
+                    i if i == len - 1 => {
+                        let next_ordinal = self.ordinal(i);
+                        let next = self.inner.get(&next_ordinal);
+                        let prev_ordinal = next.prev.expect("prev");
+                        let ordinal = prev_ordinal + ((next_ordinal - prev_ordinal) >> 1);
 
-                    let node = Node::new(value, Some(prev_ordinal), Some(next_ordinal));
+                        let node = Node::new(value, Some(prev_ordinal), Some(next_ordinal));
 
-                    self.inner.insert(ordinal, node);
-                }
-                i => {
-                    assert_bounds!(index, len);
-                    let ordinal = self.ordinal(i);
+                        self.inner.insert(ordinal, node);
+                    }
+                    i => {
+                        assert_bounds!(index, len);
+                        let ordinal = self.ordinal(i);
 
-                    let (prev, next) = {
-                        let node = self.inner.get(&ordinal);
-                        let prev = node.prev.expect("prev");
-                        let next = node.next.expect("next");
-                        if (ordinal - prev) >= (next - ordinal) {
-                            (prev, ordinal)
+                        let (prev, next) = {
+                            let node = self.inner.get(&ordinal);
+                            let prev = node.prev.expect("prev");
+                            let next = node.next.expect("next");
+
+                            if (ordinal - prev) >= (next - ordinal) {
+                                (prev, ordinal)
+                            } else {
+                                (ordinal, next)
+                            }
+                        };
+
+                        debug_assert!(prev < next);
+                        debug_assert!(next - prev > 2, "cannot insert a new ordinal between {prev} and {next}: capacity exceeded");
+
+                        let new_ordinal = prev + ((next - prev) >> 1);
+                        debug_assert_eq!(
+                            new_ordinal % 2,
+                            0,
+                            "ordinal between {prev} and {next} is {new_ordinal}"
+                        );
+
+                        let new_node = Node::new(value, Some(prev), Some(next));
+
+                        debug_assert!(!self.inner.list.contains_key(&new_ordinal));
+
+                        self.inner.insert(new_ordinal, new_node);
+
+                        if next == ordinal {
+                            // done
                         } else {
-                            (ordinal, next)
+                            self.inner.swap(ordinal, new_ordinal);
                         }
-                    };
-
-                    debug_assert!(prev < next);
-
-                    let new_ordinal = prev + ((next - prev) >> 1);
-                    let new_node = Node::new(value, Some(prev), Some(next));
-
-                    debug_assert!(!self.inner.list.contains_key(&new_ordinal));
-
-                    self.inner.insert(new_ordinal, new_node);
-
-                    if next == ordinal {
-                        // done
-                    } else {
-                        self.inner.swap(ordinal, new_ordinal);
                     }
                 }
-            },
+            }
         }
     }
 
