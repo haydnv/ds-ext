@@ -280,6 +280,10 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
         let mut hi = self.bisect_hi(cmp);
 
         let key = loop {
+            if lo >= hi {
+                break None;
+            }
+
             let mid = (lo + hi) >> 1;
             let key = self.order.get(mid).expect("key");
 
@@ -294,10 +298,6 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
                 }
             } else {
                 panic!("comparison does not match key distribution")
-            }
-
-            if lo >= hi {
-                break None;
             }
         }?;
 
@@ -524,6 +524,23 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_bisect_and_remove() {
+        let mut set = OrdHashSet::<u8>::new();
+
+        assert!(set.bisect_and_remove(|key| key.partial_cmp(&8)).is_none());
+
+        set.insert(8);
+        assert!(set.bisect_and_remove(|key| key.partial_cmp(&8)).is_some());
+        assert!(set.bisect_and_remove(|key| key.partial_cmp(&8)).is_none());
+
+        set.insert(9);
+        assert!(set.bisect_and_remove(|key| key.partial_cmp(&8)).is_none());
+
+        set.insert(7);
+        assert!(set.bisect_and_remove(|key| key.partial_cmp(&8)).is_none());
+    }
 
     #[test]
     fn test_drain() {
