@@ -340,7 +340,7 @@ pub struct Drain<'a, T> {
     state: DrainState,
 }
 
-impl<'a, T: fmt::Debug> Iterator for Drain<'a, T> {
+impl<'a, T> Iterator for Drain<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -352,7 +352,7 @@ impl<'a, T: fmt::Debug> Iterator for Drain<'a, T> {
     }
 }
 
-impl<'a, T: fmt::Debug> DoubleEndedIterator for Drain<'a, T> {
+impl<'a, T> DoubleEndedIterator for Drain<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.state.next_back(&mut self.inner)
     }
@@ -605,6 +605,11 @@ impl<T> List<T> {
             next,
             stop,
         }
+    }
+
+    /// Iterate over all element in this [`List`] mutably. Does NOT preserve order!
+    pub fn iter_mut_unordered(&mut self) -> impl Iterator<Item = &mut T> {
+        self.inner.list.values_mut().map(|node| &mut node.value)
     }
 
     /// Return `true` if this [`List`] is empty.
