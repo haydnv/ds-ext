@@ -2,7 +2,7 @@
 
 use std::borrow::Borrow;
 use std::cmp::Ordering;
-use std::collections::{HashMap as Inner, HashMap};
+use std::collections::{hash_map, HashMap as Inner};
 use std::fmt;
 use std::hash::Hash;
 use std::sync::Arc;
@@ -112,7 +112,7 @@ impl<'a, K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for Iter<'a, K, V> {
 
 /// An iterator over the keys in an [`OrdHashMap`]
 pub struct Keys<'a, K, V> {
-    inner: &'a HashMap<Arc<K>, V>,
+    inner: &'a Inner<Arc<K>, V>,
     order: super::set::Iter<'a, Arc<K>>,
 }
 
@@ -188,6 +188,32 @@ impl<'a, K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for Values<'a, K, V> 
         let key = self.order.next_back()?;
         self.inner.get(&**key)
     }
+}
+
+/// An occupied entry in an [`OrdHashMap`]
+pub type OccupiedEntry<'a, K, V> = hash_map::OccupiedEntry<'a, Arc<K>, V>;
+
+/// A vacant entry in an [`OrdHashMap`]
+pub struct VacantEntry<'a, K, V> {
+    order: &'a mut OrdHashSet<Arc<K>>,
+    entry: hash_map::VacantEntry<'a, Arc<K>, V>,
+}
+
+impl<'a, K, V> VacantEntry<'a, K, V>
+where
+    K: Eq + Hash + Ord,
+{
+    /// Create a new entry with the given `value`
+    pub fn insert(self, value: V) -> &'a mut V {
+        self.order.insert(self.entry.key().clone());
+        self.entry.insert(value)
+    }
+}
+
+/// An entry in an [`OrdHashMap`]
+pub enum Entry<'a, K, V> {
+    Occupied(hash_map::OccupiedEntry<'a, Arc<K>, V>),
+    Vacant(VacantEntry<'a, K, V>),
 }
 
 /// A [`HashMap`] ordered by key using a [`OrdHashSet`]
@@ -272,7 +298,18 @@ impl<K: Eq + Hash + Ord, V> OrdHashMap<K, V> {
         }
     }
 
-    /// Consume the `iter` and insert all its elements into this [`OrdHashMap`].
+    /// Return a mutable [`Entry`] in this [`OrdHashMap`].
+    pub fn entry<Q: Into<Arc<K>>>(&mut self, key: Q) -> Entry<K, V> {
+        match self.inner.entry(key.into()) {
+            hash_map::Entry::Occupied(entry) => Entry::Occupied(entry),
+            hash_map::Entry::Vacant(entry) => Entry::Vacant(VacantEntry {
+                entry,
+                order: &mut self.order,
+            }),
+        }
+    }
+
+    /// Consume `iter` and insert all its elements into this [`OrdHashMap`].
     pub fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
         for (key, value) in iter {
             self.insert(key, value);
