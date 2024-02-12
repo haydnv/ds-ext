@@ -1,9 +1,7 @@
-//! A hash set ordered by key using a linked list.
+//! A hash set ordered using a linked list.
 //!
 //! Example:
 //! ```
-//! use std::sync::Arc;
-//!
 //! use ds_ext::OrdHashSet;
 //!
 //! let mut set1 = OrdHashSet::new();
@@ -18,19 +16,13 @@
 //! assert!(set2.remove(&"d"));
 //! assert_eq!(set2.len(), 3);
 //!
-//! assert_eq!(**set1.difference(&set2).next().expect("diff"), "d");
 //! assert_eq!(
-//!     set1.intersection(&set2).map(|s| **s).collect::<OrdHashSet<&str>>(),
-//!     set2
-//! );
-//!
-//! assert_eq!(
-//!     set1.into_iter().map(|s| &**s).collect::<Vec<&str>>(),
+//!     set1.into_iter().collect::<Vec<&str>>(),
 //!     ["a", "b", "c", "d"]
 //! );
 //!
 //! assert_eq!(
-//!     set2.into_iter().rev().map(|s| &**s).collect::<Vec<&str>>(),
+//!     set2.into_iter().rev().collect::<Vec<&str>>(),
 //!     ["c", "b", "a"]
 //! );
 //! ```
@@ -40,7 +32,6 @@ use std::cmp::Ordering;
 use std::collections::HashSet as Inner;
 use std::fmt;
 use std::hash::Hash;
-use std::ops::Deref;
 use std::sync::Arc;
 
 use get_size::GetSize;
@@ -50,24 +41,35 @@ use super::list::List;
 
 /// An iterator to drain the contents of a [`OrdHashSet`]
 pub struct Drain<'a, T> {
-    inner: super::list::Drain<'a, Arc<T>>,
+    inner: &'a mut Inner<Arc<T>>,
+    order: super::list::Drain<'a, Arc<T>>,
 }
 
-impl<'a, T: fmt::Debug> Iterator for Drain<'a, T> {
-    type Item = Arc<T>;
+impl<'a, T> Iterator for Drain<'a, T>
+where
+    T: Eq + Hash + fmt::Debug,
+{
+    type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        let item = self.order.next()?;
+        self.inner.remove(&*item);
+        Some(Arc::try_unwrap(item).expect("item"))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
+        self.order.size_hint()
     }
 }
 
-impl<'a, T: fmt::Debug> DoubleEndedIterator for Drain<'a, T> {
+impl<'a, T> DoubleEndedIterator for Drain<'a, T>
+where
+    T: Eq + Hash + fmt::Debug,
+{
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back()
+        let item = self.order.next_back()?;
+        self.inner.remove(&*item);
+        Some(Arc::try_unwrap(item).expect("item"))
     }
 }
 
@@ -76,11 +78,13 @@ pub struct IntoIter<T> {
     inner: super::list::IntoIter<Arc<T>>,
 }
 
-impl<T> Iterator for IntoIter<T> {
-    type Item = Arc<T>;
+impl<T: fmt::Debug> Iterator for IntoIter<T> {
+    type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        self.inner
+            .next()
+            .map(|item| Arc::try_unwrap(item).expect("item"))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -88,22 +92,24 @@ impl<T> Iterator for IntoIter<T> {
     }
 }
 
-impl<T> DoubleEndedIterator for IntoIter<T> {
+impl<T: fmt::Debug> DoubleEndedIterator for IntoIter<T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back()
+        self.inner
+            .next_back()
+            .map(|item| Arc::try_unwrap(item).expect("item"))
     }
 }
 
-/// An iterator over the values in a [`OrdHashSet`]
+/// An iterator over the items in a [`OrdHashSet`]
 pub struct Iter<'a, T> {
     inner: super::list::Iter<'a, Arc<T>>,
 }
 
 impl<'a, T> Iterator for Iter<'a, T> {
-    type Item = &'a Arc<T>;
+    type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        self.inner.next().map(|item| &**item)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -113,25 +119,20 @@ impl<'a, T> Iterator for Iter<'a, T> {
 
 impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back()
+        self.inner.next_back().map(|item| &**item)
     }
 }
 
-/// A [`std::collections::HashSet`] ordered by key using a [`List`].
-///
-/// This implements `Deref` so that the standard comparison methods are still available.
+/// A [`std::collections::HashSet`] ordered using a [`List`].
 #[derive(GetSize)]
 pub struct OrdHashSet<T> {
     inner: Inner<Arc<T>>,
     order: List<Arc<T>>,
 }
 
-impl<T> Clone for OrdHashSet<T> {
+impl<T: Clone + Eq + Hash + Ord + fmt::Debug> Clone for OrdHashSet<T> {
     fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            order: self.order.clone(),
-        }
+        self.iter().cloned().collect()
     }
 }
 
@@ -142,14 +143,6 @@ impl<T: PartialEq + fmt::Debug> PartialEq for OrdHashSet<T> {
 }
 
 impl<T: Eq + fmt::Debug> Eq for OrdHashSet<T> {}
-
-impl<T> Deref for OrdHashSet<T> {
-    type Target = Inner<Arc<T>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
 
 impl<T> OrdHashSet<T> {
     /// Construct a new [`OrdHashSet`].
@@ -168,11 +161,21 @@ impl<T> OrdHashSet<T> {
         }
     }
 
-    /// Construct an iterator over the values in this [`OrdHashSet`].
+    /// Construct an iterator over the items in this [`OrdHashSet`].
     pub fn iter(&self) -> Iter<T> {
         Iter {
             inner: self.order.iter(),
         }
+    }
+
+    /// Return `true` if this [`OrdHashSet`] is empty.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// Return the number of items in this [`OrdHashSet`].
+    pub fn len(&self) -> usize {
+        self.inner.len()
     }
 }
 
@@ -192,9 +195,9 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
 
         while lo < hi {
             let mid = (lo + hi) >> 1;
-            let value = self.order.get(mid).expect("value");
+            let item = self.order.get(mid).expect("item");
 
-            if cmp(&**value).is_some() {
+            if cmp(&**item).is_some() {
                 lo = mid + 1;
             } else {
                 hi = mid;
@@ -219,9 +222,9 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
 
         while lo < hi {
             let mid = (lo + hi) >> 1;
-            let value = self.order.get(mid).expect("value");
+            let item = self.order.get(mid).expect("item");
 
-            if cmp(&**value).is_some() {
+            if cmp(&**item).is_some() {
                 hi = mid;
             } else {
                 lo = mid + 1;
@@ -237,27 +240,27 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
     {
         while lo < hi {
             let mid = (lo + hi) >> 1;
-            let key = self.order.get(mid).expect("key");
+            let item = self.order.get(mid).expect("item");
 
-            if let Some(order) = cmp(&**key) {
+            if let Some(order) = cmp(&**item) {
                 match order {
                     Ordering::Less => hi = mid,
-                    Ordering::Equal => return Some(key),
+                    Ordering::Equal => return Some(item),
                     Ordering::Greater => lo = mid + 1,
                 }
             } else {
-                panic!("comparison does not match key distribution")
+                panic!("comparison does not match distribution")
             }
         }
 
         None
     }
 
-    /// Bisect this set to match a key using the provided comparison, and return its value (if any).
+    /// Bisect this set to match an item using the provided comparison, and return it (if present).
     ///
-    /// The first key for which the comparison returns `Some(Ordering::Equal)` will be returned.
-    /// This method assumes that any partially-ordered keys (where `cmp(key).is_none()`) lie at the
-    /// beginning and/or end of the distribution.
+    /// The first item for which the comparison returns `Some(Ordering::Equal)` will be returned.
+    /// This method assumes that any partially-ordered items (where `cmp(item).is_none()`)
+    /// are ordered at the beginning or end of the set.
     pub fn bisect<Cmp>(&self, cmp: Cmp) -> Option<&T>
     where
         Cmp: Fn(&T) -> Option<Ordering> + Copy,
@@ -267,134 +270,142 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
         self.bisect_inner(cmp, lo, hi)
     }
 
-    /// Bisect this set to match and remove a key using the provided comparison.
+    /// Bisect this set to match and remove an item using the provided comparison.
     ///
-    /// The first key for which the comparison returns `Some(Ordering::Equal)` will be returned.
-    /// This method assumes that any partially-ordered keys (where `cmp(key).is_none()`) lie at the
-    /// beginning and/or end of the distribution.
-    pub fn bisect_and_remove<Cmp>(&mut self, cmp: Cmp) -> Option<Arc<T>>
+    /// The first item for which the comparison returns `Some(Ordering::Equal)` will be returned.
+    /// This method assumes that any partially-ordered items (where `cmp(item).is_none()`)
+    /// are ordered at the beginning and/or end of the set.
+    pub fn bisect_and_remove<Cmp>(&mut self, cmp: Cmp) -> Option<T>
     where
         Cmp: Fn(&T) -> Option<Ordering> + Copy,
+        T: fmt::Debug,
     {
         let mut lo = self.bisect_lo(cmp);
         let mut hi = self.bisect_hi(cmp);
 
-        let key = loop {
+        let item = loop {
             if lo >= hi {
                 break None;
             }
 
             let mid = (lo + hi) >> 1;
-            let key = self.order.get(mid).expect("key");
+            let item = self.order.get(mid).expect("item");
 
-            if let Some(order) = cmp(&**key) {
+            if let Some(order) = cmp(&**item) {
                 match order {
                     Ordering::Less => hi = mid,
                     Ordering::Equal => {
                         lo = mid;
-                        break Some(key.clone());
+                        break Some(item.clone());
                     }
                     Ordering::Greater => lo = mid + 1,
                 }
             } else {
-                panic!("comparison does not match key distribution")
+                panic!("comparison does not match distribution")
             }
         }?;
 
         self.order.remove(lo);
-        self.inner.remove(&key);
-        Some(key)
+        self.inner.remove(&item);
+
+        Some(Arc::try_unwrap(item).expect("item"))
     }
 
-    /// Remove all values from this [`OrdHashSet`].
+    /// Remove all items from this [`OrdHashSet`].
     pub fn clear(&mut self) {
         self.inner.clear();
         self.order.clear();
     }
 
-    /// Drain all values from this [`OrdHashSet`].
+    /// Drain all items from this [`OrdHashSet`].
     pub fn drain(&mut self) -> Drain<T> {
-        self.inner.clear();
-
         Drain {
-            inner: self.order.drain(),
+            inner: &mut self.inner,
+            order: self.order.drain(),
         }
     }
 
-    /// Consume the given `iter` and insert all its values into this [`OrdHashSet`]
+    /// Consume the given `iter` and insert all its items into this [`OrdHashSet`]
     pub fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for item in iter {
             self.insert(item);
         }
     }
 
-    /// Borrow the first value in this [`OrdHashSet`].
-    pub fn first(&self) -> Option<&Arc<T>> {
-        self.order.front()
+    /// Borrow the first item in this [`OrdHashSet`].
+    pub fn first(&self) -> Option<&T> {
+        self.order.front().map(|item| &**item)
     }
 
-    /// Insert a `value` into this [`OrdHashSet`] and return `false` if it was already present.
-    pub fn insert(&mut self, value: T) -> bool {
-        let new = if self.inner.contains(&value) {
+    /// Insert an `item` into this [`OrdHashSet`] and return `false` if it was already present.
+    pub fn insert(&mut self, item: T) -> bool {
+        let new = if self.inner.contains(&item) {
             false
         } else {
-            let value = Arc::new(value);
+            let item = Arc::new(item);
 
-            let index = bisect(&self.order, &value);
+            let index = bisect(&self.order, &item);
             if index == self.len() {
-                self.order.insert(index, value.clone());
+                self.order.insert(index, item.clone());
             } else {
-                let prior = self.order.get(index).expect("value").clone();
-                if &prior < &value {
-                    self.order.insert(index + 1, value.clone());
+                let prior = self.order.get(index).expect("item").clone();
+
+                if &prior < &item {
+                    self.order.insert(index + 1, item.clone());
                 } else {
-                    self.order.insert(index, value.clone());
+                    self.order.insert(index, item.clone());
                 }
             }
 
-            self.inner.insert(value)
+            self.inner.insert(item)
         };
 
         new
     }
 
-    /// Borrow the last value in this [`OrdHashSet`].
-    pub fn last(&self) -> Option<&Arc<T>> {
-        self.order.back()
+    /// Borrow the last item in this [`OrdHashSet`].
+    pub fn last(&self) -> Option<&T> {
+        self.order.back().map(|item| &**item)
     }
 
-    /// Remove and return the first value in this [`OrdHashSet`].
-    pub fn pop_first(&mut self) -> Option<Arc<T>> {
-        if let Some(value) = self.order.pop_front() {
-            self.inner.remove(&value);
-            Some(value)
+    /// Remove and return the first item in this [`OrdHashSet`].
+    pub fn pop_first(&mut self) -> Option<T>
+    where
+        T: fmt::Debug,
+    {
+        if let Some(item) = self.order.pop_front() {
+            self.inner.remove(&item);
+            Some(Arc::try_unwrap(item).expect("item"))
         } else {
             None
         }
     }
 
-    /// Remove and return the last value in this [`OrdHashSet`].
-    pub fn pop_last(&mut self) -> Option<Arc<T>> {
-        if let Some(value) = self.order.pop_back() {
-            self.inner.remove(&value);
-            Some(value)
+    /// Remove and return the last item in this [`OrdHashSet`].
+    pub fn pop_last(&mut self) -> Option<T>
+    where
+        T: fmt::Debug,
+    {
+        if let Some(item) = self.order.pop_back() {
+            self.inner.remove(&item);
+            Some(Arc::try_unwrap(item).expect("item"))
         } else {
             None
         }
     }
 
-    /// Remove the given `value` from this [`OrdHashSet`] and return `true` if it was present.
+    /// Remove the given `item` from this [`OrdHashSet`] and return `true` if it was present.
     ///
-    /// The value may be any borrowed form of `T`,
+    /// The item may be any borrowed form of `T`,
     /// but the ordering on the borrowed form **must** match the ordering of `T`.
-    pub fn remove<Q>(&mut self, value: &Q) -> bool
+    pub fn remove<Q>(&mut self, item: &Q) -> bool
     where
         Arc<T>: Borrow<Q>,
         Q: Eq + Hash + Ord,
     {
-        if self.inner.remove(value) {
-            let index = bisect(&self.order, value);
-            assert!(self.order.remove(index).expect("removed").borrow() == value);
+        if self.inner.remove(item) {
+            let index = bisect(&self.order, item);
+            assert!(self.order.remove(index).expect("removed").borrow() == item);
             true
         } else {
             false
@@ -410,7 +421,7 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
         let mut that = other.into_iter();
 
         while let Some(item) = that.next() {
-            if this.next().map(|arc| &**arc) != Some(item) {
+            if this.next() != Some(item) {
                 return false;
             }
         }
@@ -428,12 +439,12 @@ impl<T: Eq + Hash + Ord + fmt::Debug> OrdHashSet<T> {
             return true;
         }
 
-        let mut value = self.order.get(0).expect("value");
+        let mut item = self.order.get(0).expect("item");
         for i in 1..self.len() {
             let next = self.order.get(i).expect("next");
-            assert!(*value <= *next, "set out of order: {:?}", self);
-            assert!(*next >= *value);
-            value = next;
+            assert!(*item <= *next, "set out of order: {:?}", self);
+            assert!(*next >= *item);
+            item = next;
         }
 
         true
@@ -444,8 +455,8 @@ impl<T: Eq + Hash + Ord + fmt::Debug> fmt::Debug for OrdHashSet<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str("[ ")?;
 
-        for value in self {
-            write!(f, "{:?} ", value)?;
+        for item in self {
+            write!(f, "{:?} ", item)?;
         }
 
         f.write_str("]")
@@ -466,8 +477,8 @@ impl<T: Eq + Hash + Ord + fmt::Debug> FromIterator<T> for OrdHashSet<T> {
     }
 }
 
-impl<T> IntoIterator for OrdHashSet<T> {
-    type Item = Arc<T>;
+impl<T: fmt::Debug> IntoIterator for OrdHashSet<T> {
+    type Item = T;
     type IntoIter = IntoIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -478,7 +489,7 @@ impl<T> IntoIterator for OrdHashSet<T> {
 }
 
 impl<'a, T> IntoIterator for &'a OrdHashSet<T> {
-    type Item = &'a Arc<T>;
+    type Item = &'a T;
     type IntoIter = Iter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -509,9 +520,9 @@ where
 
     while lo < hi {
         let mid = (lo + hi) >> 1;
-        let value = &*list.get(mid).expect("value");
+        let item = &*list.get(mid).expect("item");
 
-        match value.borrow().cmp(target) {
+        match item.borrow().cmp(target) {
             Ordering::Less => lo = mid + 1,
             Ordering::Greater => hi = mid,
             Ordering::Equal => return mid,
@@ -529,28 +540,37 @@ mod tests {
     fn test_bisect_and_remove() {
         let mut set = OrdHashSet::<u8>::new();
 
-        assert!(set.bisect_and_remove(|key| key.partial_cmp(&8)).is_none());
+        assert!(set.bisect_and_remove(|item| item.partial_cmp(&8)).is_none());
 
         set.insert(8);
-        assert!(set.bisect_and_remove(|key| key.partial_cmp(&8)).is_some());
-        assert!(set.bisect_and_remove(|key| key.partial_cmp(&8)).is_none());
+        assert!(set.bisect_and_remove(|item| item.partial_cmp(&8)).is_some());
+        assert!(set.bisect_and_remove(|item| item.partial_cmp(&8)).is_none());
 
         set.insert(9);
-        assert!(set.bisect_and_remove(|key| key.partial_cmp(&8)).is_none());
+        assert!(set.bisect_and_remove(|item| item.partial_cmp(&8)).is_none());
 
         set.insert(7);
-        assert!(set.bisect_and_remove(|key| key.partial_cmp(&8)).is_none());
+        assert!(set.bisect_and_remove(|item| item.partial_cmp(&8)).is_none());
+    }
+
+    #[test]
+    fn test_into_iter() {
+        let mut set = OrdHashSet::new();
+        assert!(set.insert("d"));
+        assert!(set.insert("a"));
+        assert!(set.insert("c"));
+        assert!(set.insert("b"));
+        assert!(!set.insert("a"));
+        assert_eq!(set.len(), 4);
+
+        assert_eq!(set.into_iter().collect::<Vec<&str>>(), ["a", "b", "c", "d"]);
     }
 
     #[test]
     fn test_drain() {
         let mut set = OrdHashSet::from_iter(0..10);
         let expected = (0..10).into_iter().collect::<Vec<_>>();
-        let actual = set
-            .drain()
-            .map(|i| Arc::try_unwrap(i).expect("i"))
-            .collect::<Vec<_>>();
-
+        let actual = set.drain().collect::<Vec<_>>();
         assert_eq!(expected, actual);
     }
 }

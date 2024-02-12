@@ -19,9 +19,8 @@ pub struct Drain<'a, K, V> {
 }
 
 impl<'a, K: Eq + Hash + fmt::Debug, V> Drain<'a, K, V> {
-    fn next_entry(&mut self, key: Arc<Arc<K>>) -> Option<(K, V)> {
-        let value = self.inner.remove(&**key).expect("value");
-        let key = Arc::try_unwrap(key).expect("key");
+    fn next_entry(&mut self, key: Arc<K>) -> Option<(K, V)> {
+        let value = self.inner.remove(&*key).expect("value");
         let key = Arc::try_unwrap(key).expect("key");
         Some((key, value))
     }
@@ -54,9 +53,8 @@ pub struct IntoIter<K, V> {
 }
 
 impl<K: Eq + Hash + fmt::Debug, V> IntoIter<K, V> {
-    fn next_entry(&mut self, key: Arc<Arc<K>>) -> Option<(K, V)> {
-        let value = self.inner.remove(&**key).expect("value");
-        let key = Arc::try_unwrap(key).expect("key");
+    fn next_entry(&mut self, key: Arc<K>) -> Option<(K, V)> {
+        let value = self.inner.remove(&*key).expect("value");
         let key = Arc::try_unwrap(key).expect("key");
         Some((key, value))
     }
@@ -121,7 +119,7 @@ impl<'a, K: Eq + Hash + fmt::Debug, V> Iterator for Keys<'a, K, V> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let key = self.order.next()?;
-        let (key, _) = self.inner.get_key_value(&***key).expect("entry");
+        let (key, _) = self.inner.get_key_value(&**key).expect("entry");
         Some(&**key)
     }
 
@@ -133,7 +131,7 @@ impl<'a, K: Eq + Hash + fmt::Debug, V> Iterator for Keys<'a, K, V> {
 impl<'a, K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for Keys<'a, K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         let key = self.order.next_back()?;
-        let (key, _) = self.inner.get_key_value(&***key).expect("entry");
+        let (key, _) = self.inner.get_key_value(&**key).expect("entry");
         Some(&**key)
     }
 }
@@ -149,7 +147,7 @@ impl<K: Eq + Hash + fmt::Debug, V> Iterator for IntoValues<K, V> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let key = self.order.next()?;
-        self.inner.remove(&**key)
+        self.inner.remove(&*key)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -160,7 +158,7 @@ impl<K: Eq + Hash + fmt::Debug, V> Iterator for IntoValues<K, V> {
 impl<K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for IntoValues<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         let key = self.order.next_back()?;
-        self.inner.remove(&**key)
+        self.inner.remove(&*key)
     }
 }
 
@@ -398,15 +396,21 @@ impl<K: Eq + Hash + Ord, V> OrdHashMap<K, V> {
     }
 
     /// Remove and return the first value in this [`OrdHashMap`].
-    pub fn pop_first(&mut self) -> Option<V> {
+    pub fn pop_first(&mut self) -> Option<V>
+    where
+        K: fmt::Debug,
+    {
         let key = self.order.pop_first()?;
-        self.inner.remove(&**key)
+        self.inner.remove(&*key)
     }
 
     /// Remove and return the last value in this [`OrdHashMap`].
-    pub fn pop_last(&mut self) -> Option<V> {
+    pub fn pop_last(&mut self) -> Option<V>
+    where
+        K: fmt::Debug,
+    {
         let key = self.order.pop_last()?;
-        self.inner.remove(&**key)
+        self.inner.remove(&*key)
     }
 
     /// Remove an entry from this [`OrdHashMap`] and return its value, if present.
@@ -439,7 +443,10 @@ impl<K: Eq + Hash + Ord, V> OrdHashMap<K, V> {
     }
 
     /// Construct an owned iterator over the values in this [`OrdHashMap`].
-    pub fn into_values(self) -> IntoValues<K, V> {
+    pub fn into_values(self) -> IntoValues<K, V>
+    where
+        K: fmt::Debug,
+    {
         IntoValues {
             inner: self.inner,
             order: self.order.into_iter(),
@@ -466,8 +473,7 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
         Cmp: Fn(&K) -> Option<Ordering> + Copy,
     {
         let key = self.order.bisect_and_remove(|key| cmp(&*key))?;
-        let value = self.inner.remove(&**key).expect("value");
-        let key = Arc::try_unwrap(key).expect("key");
+        let value = self.inner.remove(&*key).expect("value");
         let key = Arc::try_unwrap(key).expect("key");
         Some((key, value))
     }
@@ -475,7 +481,7 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
     /// Remove and return the first entry in this [`OrdHashMap`].
     pub fn pop_first_entry(&mut self) -> Option<(K, V)> {
         let key = self.order.pop_first()?;
-        let (key, value) = self.inner.remove_entry(&**key).expect("entry");
+        let (key, value) = self.inner.remove_entry(&*key).expect("entry");
         let key = Arc::try_unwrap(key).expect("key");
         Some((key, value))
     }
@@ -483,7 +489,7 @@ impl<K: Eq + Hash + Ord + fmt::Debug, V> OrdHashMap<K, V> {
     /// Remove and return the last entry in this [`OrdHashMap`].
     pub fn pop_last_entry(&mut self) -> Option<(K, V)> {
         let key = self.order.pop_last()?;
-        let (key, value) = self.inner.remove_entry(&**key).expect("entry");
+        let (key, value) = self.inner.remove_entry(&*key).expect("entry");
         let key = Arc::try_unwrap(key).expect("key");
         Some((key, value))
     }
