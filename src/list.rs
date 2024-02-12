@@ -56,6 +56,8 @@ use get_size_derive::*;
 
 use super::tree::Tree;
 
+const MAX_LEN: usize = 2 << 31;
+
 macro_rules! assert_bounds {
     ($i:expr, $len:expr) => {
         assert!(
@@ -176,6 +178,43 @@ impl<T> Inner<T> {
         self.tree.ordinal(cardinal)
     }
 
+    fn pop_back(&mut self) -> Option<T> {
+        let node = if self.is_empty() {
+            None
+        } else if self.len() == 1 {
+            Some(self.remove(0))
+        } else {
+            let back = self.remove(MAX_LEN);
+            let new_back = self.remove(back.prev.expect("prev"));
+
+            if self.is_empty() {
+                self.insert(0, new_back);
+            } else {
+                self.insert(MAX_LEN, new_back);
+            }
+
+            debug_assert!(self.list.contains_key(&0));
+            Some(back)
+        };
+
+        node.map(|node| node.into_value())
+    }
+
+    fn pop_front(&mut self) -> Option<T> {
+        let node = if self.is_empty() {
+            None
+        } else if self.len() == 1 {
+            Some(self.remove(0))
+        } else {
+            let front = self.remove(0);
+            let new_front = self.remove(front.next.expect("next"));
+            self.insert(0, new_front);
+            Some(front)
+        };
+
+        node.map(|node| node.into_value())
+    }
+
     fn remove(&mut self, ordinal: usize) -> Node<T> {
         debug_assert!(self.is_valid());
 
@@ -284,101 +323,51 @@ impl<T> Inner<T> {
     }
 }
 
-struct DrainState {
-    size: usize,
-    next: Option<usize>,
-    last: Option<usize>,
-}
-
-impl DrainState {
-    fn next<T>(&mut self, inner: &mut Inner<T>) -> Option<T> {
-        let ordinal = self.next?;
-        let node = inner.remove(ordinal);
-
-        self.size -= 1;
-
-        self.next = if self.last == Some(ordinal) {
-            None
-        } else {
-            node.next
-        };
-
-        if self.next.is_none() {
-            self.last = None;
-        }
-
-        Some(node.into_value())
-    }
-
-    fn next_back<T>(&mut self, inner: &mut Inner<T>) -> Option<T> {
-        let ordinal = self.last?;
-        let node = inner.remove(ordinal);
-
-        self.size -= 1;
-
-        self.last = if self.next == Some(ordinal) {
-            None
-        } else {
-            node.prev
-        };
-
-        if self.last.is_none() {
-            self.next = None;
-        }
-
-        Some(node.into_value())
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.size, Some(self.size))
-    }
-}
-
 /// An iterator to drain the contents of a [`List`]
 pub struct Drain<'a, T> {
     inner: &'a mut Inner<T>,
-    state: DrainState,
 }
 
 impl<'a, T> Iterator for Drain<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.state.next(&mut self.inner)
+        self.inner.pop_front()
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.state.size_hint()
+        let size = self.inner.len();
+        (size, Some(size))
     }
 }
 
 impl<'a, T> DoubleEndedIterator for Drain<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.state.next_back(&mut self.inner)
+        self.inner.pop_back()
     }
 }
 
 /// An iterator over the contents of a [`List`]
 pub struct IntoIter<T> {
     inner: Inner<T>,
-    state: DrainState,
 }
 
 impl<T> Iterator for IntoIter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.state.next(&mut self.inner)
+        self.inner.pop_front()
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.state.size_hint()
+        let size = self.inner.len();
+        (size, Some(size))
     }
 }
 
 impl<T> DoubleEndedIterator for IntoIter<T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.state.next_back(&mut self.inner)
+        self.inner.pop_back()
     }
 }
 
@@ -445,8 +434,6 @@ pub struct List<T> {
 }
 
 impl<T> List<T> {
-    const MAX_LEN: usize = 2 << 31;
-
     /// Create a new empty [`List`].
     pub fn new() -> Self {
         Self {
@@ -465,13 +452,13 @@ impl<T> List<T> {
 impl<T> List<T> {
     /// Borrow the last element in this [`List`], if any.
     pub fn back(&self) -> Option<&T> {
-        let ordinal = if self.len() <= 1 { 0 } else { Self::MAX_LEN };
+        let ordinal = if self.len() <= 1 { 0 } else { MAX_LEN };
         self.inner.get_value(&ordinal)
     }
 
     /// Borrow the last element in this [`List`], if any.
     pub fn back_mut(&mut self) -> Option<&mut T> {
-        let ordinal = if self.len() <= 1 { 0 } else { Self::MAX_LEN };
+        let ordinal = if self.len() <= 1 { 0 } else { MAX_LEN };
         self.inner.get_value_mut(&ordinal)
     }
 
@@ -483,17 +470,8 @@ impl<T> List<T> {
 
     /// Drain all elements from this [`List`].
     pub fn drain(&mut self) -> Drain<T> {
-        let size = self.len();
-        let next = if size == 0 { None } else { Some(0) };
-        let last = match size {
-            0 => None,
-            1 => Some(0),
-            _ => Some(Self::MAX_LEN),
-        };
-
         Drain {
             inner: &mut self.inner,
-            state: DrainState { size, next, last },
         }
     }
 
@@ -555,8 +533,8 @@ impl<T> List<T> {
             2 => match index {
                 0 => self.push_front(value),
                 1 => {
-                    let node = Node::new(value, Some(0), Some(Self::MAX_LEN));
-                    self.inner.insert(Self::MAX_LEN >> 1, node);
+                    let node = Node::new(value, Some(0), Some(MAX_LEN));
+                    self.inner.insert(MAX_LEN >> 1, node);
                 }
                 2 => self.push_back(value),
                 i => panic!("cannot insert at index {} in a list of length {}", i, 2),
@@ -567,7 +545,7 @@ impl<T> List<T> {
                 assert_bounds!(index, len);
                 let ordinal = self.ordinal(index);
 
-                if ordinal < (Self::MAX_LEN >> 1) {
+                if ordinal < (MAX_LEN >> 1) {
                     let insert_ordinal = self.insert_after(value, ordinal);
                     debug_assert!(insert_ordinal > ordinal);
                     self.inner.swap(insert_ordinal, ordinal);
@@ -596,7 +574,7 @@ impl<T> List<T> {
         let (next, stop) = match self.len() {
             0 => (None, None),
             1 => (Some(0), Some(0)),
-            _ => (Some(0), Some(Self::MAX_LEN)),
+            _ => (Some(0), Some(MAX_LEN)),
         };
 
         Iter {
@@ -624,41 +602,12 @@ impl<T> List<T> {
 
     /// Remove and return the last value in this [`List`].
     pub fn pop_back(&mut self) -> Option<T> {
-        let node = if self.is_empty() {
-            None
-        } else if self.len() == 1 {
-            Some(self.inner.remove(0))
-        } else {
-            let back = self.inner.remove(Self::MAX_LEN);
-            let new_back = self.inner.remove(back.prev.expect("prev"));
-
-            if self.inner.is_empty() {
-                self.inner.insert(0, new_back);
-            } else {
-                self.inner.insert(Self::MAX_LEN, new_back);
-            }
-
-            debug_assert!(self.inner.list.contains_key(&0));
-            Some(back)
-        };
-
-        node.map(|node| node.into_value())
+        self.inner.pop_back()
     }
 
     /// Remove and return the first value in this [`List`].
     pub fn pop_front(&mut self) -> Option<T> {
-        let node = if self.is_empty() {
-            None
-        } else if self.len() == 1 {
-            Some(self.inner.remove(0))
-        } else {
-            let front = self.inner.remove(0);
-            let new_front = self.inner.remove(front.next.expect("next"));
-            self.inner.insert(0, new_front);
-            Some(front)
-        };
-
-        node.map(|node| node.into_value())
+        self.inner.pop_front()
     }
 
     /// Append the given `value` to the back of this [`List`].
@@ -667,18 +616,18 @@ impl<T> List<T> {
             0 => self.push_front(value),
             1 => {
                 let node = Node::new(value, Some(0), None);
-                self.inner.insert(Self::MAX_LEN, node)
+                self.inner.insert(MAX_LEN, node)
             }
             2 => {
-                let new_ordinal = Self::MAX_LEN >> 1;
-                let new_node = Node::new(value, Some(0), Some(Self::MAX_LEN));
+                let new_ordinal = MAX_LEN >> 1;
+                let new_node = Node::new(value, Some(0), Some(MAX_LEN));
 
                 self.inner.insert(new_ordinal, new_node);
-                self.inner.swap(new_ordinal, Self::MAX_LEN);
+                self.inner.swap(new_ordinal, MAX_LEN);
             }
             _ => {
-                let ordinal = self.insert_before(value, Self::MAX_LEN);
-                self.inner.swap(ordinal, Self::MAX_LEN);
+                let ordinal = self.insert_before(value, MAX_LEN);
+                self.inner.swap(ordinal, MAX_LEN);
             }
         }
     }
@@ -730,12 +679,12 @@ impl<T> List<T> {
             }
             1 => {
                 let node = Node::new(value, Some(0), None);
-                self.inner.insert(Self::MAX_LEN, node);
-                self.inner.swap(0, Self::MAX_LEN);
+                self.inner.insert(MAX_LEN, node);
+                self.inner.swap(0, MAX_LEN);
             }
             2 => {
-                let new_ordinal = Self::MAX_LEN >> 1;
-                let new_node = Node::new(value, Some(0), Some(Self::MAX_LEN));
+                let new_ordinal = MAX_LEN >> 1;
+                let new_node = Node::new(value, Some(0), Some(MAX_LEN));
                 self.inner.insert(new_ordinal, new_node);
                 self.inner.swap(new_ordinal, 0);
             }
@@ -825,7 +774,7 @@ impl<T> List<T> {
         let end = match range.end_bound() {
             Bound::Included(end) if end < &self.len() => *end,
             Bound::Excluded(end) if end <= &self.len() => *end - 1,
-            _ => Self::MAX_LEN,
+            _ => MAX_LEN,
         };
 
         Iter {
@@ -897,7 +846,7 @@ impl<T> List<T> {
             if self.len() == 1 {
                 0
             } else {
-                Self::MAX_LEN
+                MAX_LEN
             }
         } else {
             self.inner.ordinal(cardinal)
@@ -957,18 +906,7 @@ impl<T> IntoIterator for List<T> {
     type IntoIter = IntoIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let next = if self.is_empty() { None } else { Some(0) };
-        let size = self.len();
-        let last = if self.len() == 1 {
-            Some(0)
-        } else {
-            Some(Self::MAX_LEN)
-        };
-
-        IntoIter {
-            inner: self.inner,
-            state: DrainState { size, next, last },
-        }
+        IntoIter { inner: self.inner }
     }
 }
 
@@ -1006,6 +944,15 @@ mod tests {
     use rand::Rng;
 
     #[test]
+    fn test_drain_partial() {
+        let mut list = List::from_iter(0..10);
+        let drained = list.drain().take_while(|i| *i < 5).collect::<Vec<_>>();
+
+        assert_eq!(drained, vec![0, 1, 2, 3, 4]);
+        assert_eq!(list, vec![6, 7, 8, 9]);
+    }
+
+    #[test]
     fn test_list() {
         let mut rng = rand::thread_rng();
 
@@ -1016,7 +963,7 @@ mod tests {
             list.push_front("0".to_string());
             vector.insert(0, "0".to_string());
 
-            let max = Ord::min(i, List::<String>::MAX_LEN);
+            let max = Ord::min(i, MAX_LEN);
             for _ in 0..max {
                 let r = rng.gen_range(0..list.len());
                 list.insert(r, r.to_string());
