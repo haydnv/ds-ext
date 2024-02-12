@@ -347,6 +347,31 @@ impl<'a, T> DoubleEndedIterator for Drain<'a, T> {
     }
 }
 
+/// An iterator to drain the contents of a [`List`] conditionally
+pub struct DrainWhile<'a, T, Cond> {
+    inner: &'a mut Inner<T>,
+    cond: Cond,
+}
+
+impl<'a, T, Cond> Iterator for DrainWhile<'a, T, Cond>
+where
+    Cond: Fn(&T) -> bool,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if (self.cond)(self.inner.get_value(&0)?) {
+            self.inner.pop_front()
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (0, Some(self.inner.len()))
+    }
+}
+
 /// An iterator over the contents of a [`List`]
 pub struct IntoIter<T> {
     inner: Inner<T>,
@@ -472,6 +497,17 @@ impl<T> List<T> {
     pub fn drain(&mut self) -> Drain<T> {
         Drain {
             inner: &mut self.inner,
+        }
+    }
+
+    /// Drain the first elements from this [`List`] which match the given `cond`ition.
+    pub fn drain_while<Cond>(&mut self, cond: Cond) -> DrainWhile<T, Cond>
+    where
+        Cond: Fn(&T) -> bool,
+    {
+        DrainWhile {
+            inner: &mut self.inner,
+            cond,
         }
     }
 
@@ -950,6 +986,15 @@ mod tests {
 
         assert_eq!(drained, vec![0, 1, 2, 3, 4]);
         assert_eq!(list, vec![6, 7, 8, 9]);
+    }
+
+    #[test]
+    fn test_drain_while() {
+        let mut list = List::from_iter(0..10);
+        let drained = list.drain_while(|i| *i < 5).collect::<Vec<_>>();
+
+        assert_eq!(drained, vec![0, 1, 2, 3, 4]);
+        assert_eq!(list, vec![5, 6, 7, 8, 9]);
     }
 
     #[test]

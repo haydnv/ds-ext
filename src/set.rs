@@ -73,6 +73,35 @@ where
     }
 }
 
+/// An iterator to drain the contents of a [`OrdHashSet`] conditionally
+pub struct DrainWhile<'a, T, Cond> {
+    inner: &'a mut Inner<Arc<T>>,
+    order: &'a mut List<Arc<T>>,
+    cond: Cond,
+}
+
+impl<'a, T, Cond> Iterator for DrainWhile<'a, T, Cond>
+where
+    T: Eq + Hash + fmt::Debug,
+    Cond: Fn(&T) -> bool,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if (self.cond)(self.order.front()?) {
+            let item = self.order.pop_front().expect("item");
+            self.inner.remove(&*item);
+            Some(Arc::try_unwrap(item).expect("item"))
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (0, Some(self.inner.len()))
+    }
+}
+
 /// An iterator over the contents of a [`OrdHashSet`]
 pub struct IntoIter<T> {
     inner: super::list::IntoIter<Arc<T>>,
@@ -325,6 +354,18 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
         }
     }
 
+    /// Drain items from this [`OrdHashSet`] while they match the given `cond`ition.
+    pub fn drain_while<Cond>(&mut self, cond: Cond) -> DrainWhile<T, Cond>
+    where
+        Cond: Fn(&T) -> bool,
+    {
+        DrainWhile {
+            inner: &mut self.inner,
+            order: &mut self.order,
+            cond,
+        }
+    }
+
     /// Consume the given `iter` and insert all its items into this [`OrdHashSet`]
     pub fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for item in iter {
@@ -572,5 +613,13 @@ mod tests {
         let expected = (0..10).into_iter().collect::<Vec<_>>();
         let actual = set.drain().collect::<Vec<_>>();
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_drain_while() {
+        let mut set = OrdHashSet::from_iter(0..10);
+        let drained = set.drain_while(|x| *x < 5).collect::<Vec<_>>();
+        assert_eq!(drained, vec![0, 1, 2, 3, 4]);
+        assert_eq!(set, OrdHashSet::from_iter(5..10));
     }
 }

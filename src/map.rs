@@ -46,6 +46,40 @@ impl<'a, K: Eq + Hash + fmt::Debug, V> DoubleEndedIterator for Drain<'a, K, V> {
     }
 }
 
+/// An iterator to drain the contents of an [`OrdHashMap`] conditionally
+pub struct DrainWhile<'a, K, V, Cond> {
+    inner: &'a mut Inner<Arc<K>, V>,
+    order: &'a mut OrdHashSet<Arc<K>>,
+    cond: Cond,
+}
+
+impl<'a, K, V, Cond> Iterator for DrainWhile<'a, K, V, Cond>
+where
+    K: Eq + Hash + Ord + fmt::Debug,
+    Cond: Fn((&K, &V)) -> bool,
+{
+    type Item = (K, V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if {
+            let key = self.order.first()?;
+            let value = self.inner.get(&**key).expect("value");
+            (self.cond)((&**key, value))
+        } {
+            let key = self.order.pop_first().expect("key");
+            let value = self.inner.remove(&*key).expect("value");
+            let key = Arc::try_unwrap(key).expect("key");
+            Some((key, value))
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (0, Some(self.inner.len()))
+    }
+}
+
 /// An iterator over the contents of an [`OrdHashMap`]
 pub struct IntoIter<K, V> {
     inner: Inner<Arc<K>, V>,
@@ -293,6 +327,18 @@ impl<K: Eq + Hash + Ord, V> OrdHashMap<K, V> {
         Drain {
             inner: &mut self.inner,
             order: self.order.drain(),
+        }
+    }
+
+    /// Drain all entries from this [`OrdHashMap`].
+    pub fn drain_while<Cond>(&mut self, cond: Cond) -> DrainWhile<K, V, Cond>
+    where
+        Cond: Fn((&K, &V)) -> bool,
+    {
+        DrainWhile {
+            inner: &mut self.inner,
+            order: &mut self.order,
+            cond,
         }
     }
 
@@ -609,6 +655,44 @@ mod tests {
                 .into_iter()
                 .map(|i| (i, i.to_string()))
                 .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_drain_partial() {
+        let mut map: OrdHashMap<u32, String> =
+            (0..10).into_iter().map(|i| (i, i.to_string())).collect();
+
+        assert_eq!(
+            map.drain().take_while(|(k, _v)| *k < 5).collect::<Vec<_>>(),
+            (0..5)
+                .into_iter()
+                .map(|i| (i, i.to_string()))
+                .collect::<Vec<_>>()
+        );
+
+        assert_eq!(
+            map,
+            (6..10).into_iter().map(|i| (i, i.to_string())).collect()
+        );
+    }
+
+    #[test]
+    fn test_drain_while() {
+        let mut map: OrdHashMap<u32, String> =
+            (0..10).into_iter().map(|i| (i, i.to_string())).collect();
+
+        assert_eq!(
+            map.drain_while(|(k, _v)| *k < 5).collect::<Vec<_>>(),
+            (0..5)
+                .into_iter()
+                .map(|i| (i, i.to_string()))
+                .collect::<Vec<_>>()
+        );
+
+        assert_eq!(
+            map,
+            (5..10).into_iter().map(|i| (i, i.to_string())).collect()
         );
     }
 }
