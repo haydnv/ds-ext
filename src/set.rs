@@ -346,6 +346,15 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
         self.order.clear();
     }
 
+    /// Return `true` if the given item is present in this [`OrdHashSet`].
+    pub fn contains<Q: ?Sized>(&self, item: &Q) -> bool
+    where
+        Arc<T>: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.inner.contains(item)
+    }
+
     /// Drain all items from this [`OrdHashSet`].
     pub fn drain(&mut self) -> Drain<T> {
         Drain {
