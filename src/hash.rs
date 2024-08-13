@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use async_hash::{default_hash, Digest, Hash, Output};
 
 use super::{LinkedHashMap, List, OrdHashMap, OrdHashSet};
@@ -117,7 +115,7 @@ where
 
 impl<D: Digest, T> Hash<D> for OrdHashSet<T>
 where
-    Arc<T>: Hash<D>,
+    for<'a> &'a T: Hash<D>,
 {
     fn hash(self) -> Output<D> {
         if self.is_empty() {
@@ -125,7 +123,7 @@ where
         }
 
         let mut hasher = D::new();
-        for item in self {
+        for item in self.iter() {
             hasher.update(item.hash());
         }
         hasher.finalize()
@@ -134,7 +132,7 @@ where
 
 impl<'a, D: Digest, T> Hash<D> for &'a OrdHashSet<T>
 where
-    &'a Arc<T>: Hash<D>,
+    &'a T: Hash<D>,
 {
     fn hash(self) -> Output<D> {
         if self.is_empty() {

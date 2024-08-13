@@ -1,7 +1,6 @@
 use std::fmt;
 use std::hash::Hash;
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use destream::{de, en};
@@ -269,8 +268,7 @@ where
 
 impl<'en, T> en::IntoStream<'en> for OrdHashSet<T>
 where
-    T: 'en,
-    Arc<T>: en::IntoStream<'en>,
+    T: en::IntoStream<'en> + fmt::Debug + 'en,
 {
     fn into_stream<E: en::Encoder<'en>>(self, encoder: E) -> Result<E::Ok, E::Error> {
         encoder.collect_seq(self)

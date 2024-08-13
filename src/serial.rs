@@ -1,7 +1,6 @@
 use std::fmt;
 use std::hash::Hash;
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -214,10 +213,7 @@ impl<'de, T: Deserialize<'de> + Ord + Hash + Eq> Deserialize<'de> for OrdHashSet
     }
 }
 
-impl<T> Serialize for OrdHashSet<T>
-where
-    Arc<T>: Serialize,
-{
+impl<T: Serialize> Serialize for OrdHashSet<T> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_seq(self)
     }
