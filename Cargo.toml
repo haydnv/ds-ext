@@ -11,6 +11,10 @@ readme = "README.md"
 categories = ["data-structures"]
 keywords = ["ordered", "set", "map", "custom", "order"]
 
+[[bench]]
+name = "comparison"
+harness = false
+
 [features]
 all = ["hash", "stream", "serialize"]
 hash = ["async-hash", "hex"]
@@ -29,4 +33,5 @@ safecast = "0.2"
 serde = { version = "1.0", optional = true }
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
 rand = "0.8"
