@@ -12,7 +12,11 @@ categories = ["data-structures"]
 keywords = ["ordered", "set", "map", "custom", "order"]
 
 [[bench]]
-name = "comparison"
+name = "list_vs_vec"
+harness = false
+
+[[bench]]
+name = "ordmap_vs_btreemap"
 harness = false
 
 [features]
