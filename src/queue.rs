@@ -1,8 +1,5 @@
 //! A linked hash map ordered by insertion which can be reordered by swapping,
 //! useful as a simple priority queue (e.g. an LFU or LRU cache).
-//!
-//! Note: [`LinkedHashMap`] is indexed by keys.
-//! For indexing by cardinal order, use a [`super::List`] instead.
 
 use std::borrow::Borrow;
 use std::cell::{Ref, RefCell, RefMut};

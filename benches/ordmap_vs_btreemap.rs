@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use ds_ext::{OrdHashMap};
+use ds_ext::OrdHashMap;
 use rand::Rng;
 
 fn ord_read(map: &mut OrdHashMap<usize, usize>, num_reads: usize) {
