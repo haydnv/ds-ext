@@ -1,4 +1,4 @@
-//! A hash set ordered using a linked list.
+//! A hash set ordered using a [`Vec`].
 //!
 //! Example:
 //! ```
@@ -150,7 +150,7 @@ impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
     }
 }
 
-/// A [`std::collections::HashSet`] ordered using a [`List`].
+/// A [`std::collections::HashSet`] ordered using a [`Vec`].
 #[derive(GetSize)]
 pub struct OrdHashSet<T> {
     inner: Inner<Arc<T>>,

@@ -143,7 +143,7 @@ impl<'de, T: Deserialize<'de> + Ord + Hash + Eq> Visitor<'de> for SetVisitor<T> 
     type Value = OrdHashSet<T>;
 
     fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("a List")
+        f.write_str("a set")
     }
 
     fn visit_seq<A: SeqAccess<'de>>(self, mut access: A) -> Result<Self::Value, A::Error> {

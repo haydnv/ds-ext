@@ -1,10 +1,10 @@
 //! This crate repackages standard data structures with additional capabilities,
 //! like fast ordered maps and sets.
 //!
-//! The ordered collection types use a [`Vec`] internally for ordering.
-//!
-//! The map and set types support a `Key` trait to allow using arbitrary type `T: Key<K>`
-//! to look up an entry with key type `K`.
+//! [`OrdHashSet`] uses a [`Vec`] internally for ordering.
+//! [`OrdHashSet`] and [`OrdHashMap`] both implement a `bisect` method
+//! which allows looking up a key by comparison,
+//! potentially avoiding the need for a heap allocation to construct a search key..
 //!
 //! Features:
 //!  - `all`: enables all features
