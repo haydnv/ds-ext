@@ -20,4 +20,4 @@ assert!(set.contains(&1));
 
 let mut map = OrdHashMap::from_iter(set.into_iter().map(|i| (i, i)));
 assert_eq!(map.get(&1), map.bisect(|i| i.partial_cmp(&1)));
-//! ```
+```
