@@ -5,53 +5,7 @@ use std::marker::PhantomData;
 use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use super::{LinkedHashMap, List, OrdHashMap, OrdHashSet};
-
-struct ListVisitor<T> {
-    phantom: PhantomData<T>,
-}
-
-impl<T> Default for ListVisitor<T> {
-    fn default() -> Self {
-        Self {
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<'de, T: Deserialize<'de>> Visitor<'de> for ListVisitor<T> {
-    type Value = List<T>;
-
-    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("a List")
-    }
-
-    fn visit_seq<A: SeqAccess<'de>>(self, mut access: A) -> Result<Self::Value, A::Error> {
-        let mut list = if let Some(size_hint) = access.size_hint() {
-            List::with_capacity(size_hint)
-        } else {
-            List::new()
-        };
-
-        while let Some(item) = access.next_element()? {
-            list.push_back(item);
-        }
-
-        Ok(list)
-    }
-}
-
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for List<T> {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_seq(ListVisitor::default())
-    }
-}
-
-impl<T: Serialize> Serialize for List<T> {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.collect_seq(self)
-    }
-}
+use super::{LinkedHashMap, OrdHashMap, OrdHashSet};
 
 struct LinkedHashMapVisitor<K, V> {
     key: PhantomData<K>,
@@ -189,7 +143,7 @@ impl<'de, T: Deserialize<'de> + Ord + Hash + Eq> Visitor<'de> for SetVisitor<T> 
     type Value = OrdHashSet<T>;
 
     fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("a List")
+        f.write_str("a set")
     }
 
     fn visit_seq<A: SeqAccess<'de>>(self, mut access: A) -> Result<Self::Value, A::Error> {

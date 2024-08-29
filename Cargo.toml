@@ -1,6 +1,6 @@
 [package]
 name = "ds-ext"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["code@tinychain.net"]
 edition = "2021"
 license = "Apache-2.0"
@@ -12,7 +12,7 @@ categories = ["data-structures"]
 keywords = ["ordered", "set", "map", "custom", "order"]
 
 [[bench]]
-name = "comparison"
+name = "ordmap_vs_btreemap"
 harness = false
 
 [features]

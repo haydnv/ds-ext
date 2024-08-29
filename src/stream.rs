@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use async_trait::async_trait;
 use destream::{de, en};
 
-use super::{LinkedHashMap, List, OrdHashMap, OrdHashSet};
+use super::{LinkedHashMap, OrdHashMap, OrdHashSet};
 
 struct LinkedHashMapVisitor<K, V> {
     key: PhantomData<K>,
@@ -80,62 +80,6 @@ where
 {
     fn to_stream<E: en::Encoder<'en>>(&'en self, encoder: E) -> Result<E::Ok, E::Error> {
         encoder.collect_map(self)
-    }
-}
-
-struct ListVisitor<T> {
-    phantom: PhantomData<T>,
-}
-
-impl<T> Default for ListVisitor<T> {
-    fn default() -> Self {
-        Self {
-            phantom: PhantomData,
-        }
-    }
-}
-
-#[async_trait]
-impl<T: de::FromStream<Context = ()>> de::Visitor for ListVisitor<T> {
-    type Value = List<T>;
-
-    fn expecting() -> &'static str {
-        "a List"
-    }
-
-    async fn visit_seq<A: de::SeqAccess>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        let mut list = if let Some(size_hint) = seq.size_hint() {
-            List::with_capacity(size_hint)
-        } else {
-            List::new()
-        };
-
-        while let Some(item) = seq.next_element(()).await? {
-            list.push_back(item);
-        }
-
-        Ok(list)
-    }
-}
-
-#[async_trait]
-impl<T: de::FromStream<Context = ()>> de::FromStream for List<T> {
-    type Context = ();
-
-    async fn from_stream<D: de::Decoder>(_: (), decoder: &mut D) -> Result<Self, D::Error> {
-        decoder.decode_seq(ListVisitor::default()).await
-    }
-}
-
-impl<'en, T: en::IntoStream<'en> + 'en> en::IntoStream<'en> for List<T> {
-    fn into_stream<E: en::Encoder<'en>>(self, encoder: E) -> Result<E::Ok, E::Error> {
-        encoder.collect_seq(self)
-    }
-}
-
-impl<'en, T: en::ToStream<'en> + 'en> en::ToStream<'en> for List<T> {
-    fn to_stream<E: en::Encoder<'en>>(&'en self, encoder: E) -> Result<E::Ok, E::Error> {
-        encoder.collect_seq(self)
     }
 }
 

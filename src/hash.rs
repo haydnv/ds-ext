@@ -1,6 +1,6 @@
 use async_hash::{default_hash, Digest, Hash, Output};
 
-use super::{LinkedHashMap, List, OrdHashMap, OrdHashSet};
+use super::{LinkedHashMap, OrdHashMap, OrdHashSet};
 
 impl<D, K, V> Hash<D> for LinkedHashMap<K, V>
 where
@@ -28,37 +28,6 @@ where
     K: Eq + std::hash::Hash,
     (&'a K, &'a V): Hash<D>,
     Self: IntoIterator<Item = (&'a K, &'a V)>,
-{
-    fn hash(self) -> Output<D> {
-        if self.is_empty() {
-            return default_hash::<D>();
-        }
-
-        let mut hasher = D::new();
-        for item in self {
-            hasher.update(item.hash());
-        }
-        hasher.finalize()
-    }
-}
-
-impl<D: Digest, T: Hash<D>> Hash<D> for List<T> {
-    fn hash(self) -> Output<D> {
-        if self.is_empty() {
-            return default_hash::<D>();
-        }
-
-        let mut hasher = D::new();
-        for item in self {
-            hasher.update(item.hash());
-        }
-        hasher.finalize()
-    }
-}
-
-impl<'a, D: Digest, T> Hash<D> for &'a List<T>
-where
-    &'a T: Hash<D>,
 {
     fn hash(self) -> Output<D> {
         if self.is_empty() {

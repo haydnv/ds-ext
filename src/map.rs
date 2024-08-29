@@ -248,7 +248,7 @@ pub enum Entry<'a, K, V> {
     Vacant(VacantEntry<'a, K, V>),
 }
 
-/// A [`HashMap`] ordered by key using a [`OrdHashSet`]
+/// A `HashMap` ordered by key using a [`OrdHashSet`]
 #[derive(GetSize)]
 pub struct OrdHashMap<K, V> {
     inner: Inner<Arc<K>, V>,

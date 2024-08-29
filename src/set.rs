@@ -1,4 +1,4 @@
-//! A hash set ordered using a linked list.
+//! A hash set ordered using a [`Vec`].
 //!
 //! Example:
 //! ```
@@ -37,12 +37,10 @@ use std::sync::Arc;
 use get_size::GetSize;
 use get_size_derive::*;
 
-use super::list::List;
-
 /// An iterator to drain the contents of a [`OrdHashSet`]
 pub struct Drain<'a, T> {
     inner: &'a mut Inner<Arc<T>>,
-    order: super::list::Drain<'a, Arc<T>>,
+    order: std::vec::Drain<'a, Arc<T>>,
 }
 
 impl<'a, T> Iterator for Drain<'a, T>
@@ -76,7 +74,7 @@ where
 /// An iterator to drain the contents of a [`OrdHashSet`] conditionally
 pub struct DrainWhile<'a, T, Cond> {
     inner: &'a mut Inner<Arc<T>>,
-    order: &'a mut List<Arc<T>>,
+    order: &'a mut Vec<Arc<T>>,
     cond: Cond,
 }
 
@@ -88,8 +86,8 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if (self.cond)(self.order.front()?) {
-            let item = self.order.pop_front().expect("item");
+        if (self.cond)(self.order.iter().next()?) {
+            let item = self.order.remove(0);
             self.inner.remove(&*item);
             Some(Arc::try_unwrap(item).expect("item"))
         } else {
@@ -104,7 +102,7 @@ where
 
 /// An iterator over the contents of a [`OrdHashSet`]
 pub struct IntoIter<T> {
-    inner: super::list::IntoIter<Arc<T>>,
+    inner: std::vec::IntoIter<Arc<T>>,
 }
 
 impl<T: fmt::Debug> Iterator for IntoIter<T> {
@@ -131,7 +129,7 @@ impl<T: fmt::Debug> DoubleEndedIterator for IntoIter<T> {
 
 /// An iterator over the items in a [`OrdHashSet`]
 pub struct Iter<'a, T> {
-    inner: super::list::Iter<'a, Arc<T>>,
+    inner: std::slice::Iter<'a, Arc<T>>,
 }
 
 impl<'a, T> Iterator for Iter<'a, T> {
@@ -152,11 +150,11 @@ impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
     }
 }
 
-/// A [`std::collections::HashSet`] ordered using a [`List`].
+/// A [`std::collections::HashSet`] ordered using a [`Vec`].
 #[derive(GetSize)]
 pub struct OrdHashSet<T> {
     inner: Inner<Arc<T>>,
-    order: List<Arc<T>>,
+    order: Vec<Arc<T>>,
 }
 
 impl<T: Clone + Eq + Hash + Ord + fmt::Debug> Clone for OrdHashSet<T> {
@@ -178,7 +176,7 @@ impl<T> OrdHashSet<T> {
     pub fn new() -> Self {
         Self {
             inner: Inner::new(),
-            order: List::new(),
+            order: Vec::new(),
         }
     }
 
@@ -186,7 +184,7 @@ impl<T> OrdHashSet<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             inner: Inner::with_capacity(capacity),
-            order: List::with_capacity(capacity),
+            order: Vec::with_capacity(capacity),
         }
     }
 
@@ -215,7 +213,7 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
     {
         if self.is_empty() {
             return 0;
-        } else if cmp(self.order.back().expect("tail")).is_some() {
+        } else if cmp(self.order.iter().next_back().expect("tail")).is_some() {
             return self.len();
         }
 
@@ -242,7 +240,7 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
     {
         if self.is_empty() {
             return 0;
-        } else if cmp(self.order.front().expect("head")).is_some() {
+        } else if cmp(&self.order[0]).is_some() {
             return 0;
         }
 
@@ -359,7 +357,7 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
     pub fn drain(&mut self) -> Drain<T> {
         Drain {
             inner: &mut self.inner,
-            order: self.order.drain(),
+            order: self.order.drain(..),
         }
     }
 
@@ -384,7 +382,7 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
 
     /// Borrow the first item in this [`OrdHashSet`].
     pub fn first(&self) -> Option<&T> {
-        self.order.front().map(|item| &**item)
+        self.order.iter().next().map(|item| &**item)
     }
 
     /// Insert an `item` into this [`OrdHashSet`] and return `false` if it was already present.
@@ -415,7 +413,7 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
 
     /// Borrow the last item in this [`OrdHashSet`].
     pub fn last(&self) -> Option<&T> {
-        self.order.back().map(|item| &**item)
+        self.order.iter().next_back().map(|item| &**item)
     }
 
     /// Remove and return the first item in this [`OrdHashSet`].
@@ -423,11 +421,12 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
     where
         T: fmt::Debug,
     {
-        if let Some(item) = self.order.pop_front() {
+        if self.is_empty() {
+            None
+        } else {
+            let item = self.order.remove(0);
             self.inner.remove(&item);
             Some(Arc::try_unwrap(item).expect("item"))
-        } else {
-            None
         }
     }
 
@@ -436,7 +435,7 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
     where
         T: fmt::Debug,
     {
-        if let Some(item) = self.order.pop_back() {
+        if let Some(item) = self.order.pop() {
             self.inner.remove(&item);
             Some(Arc::try_unwrap(item).expect("item"))
         } else {
@@ -455,7 +454,7 @@ impl<T: Eq + Hash + Ord> OrdHashSet<T> {
     {
         if self.inner.remove(item) {
             let index = bisect(&self.order, item);
-            assert!(self.order.remove(index).expect("removed").borrow() == item);
+            assert!(self.order.remove(index).borrow() == item);
             true
         } else {
             false
@@ -548,18 +547,18 @@ impl<'a, T> IntoIterator for &'a OrdHashSet<T> {
 }
 
 #[inline]
-fn bisect<T, Q>(list: &List<T>, target: &Q) -> usize
+fn bisect<T, Q>(list: &Vec<T>, target: &Q) -> usize
 where
     T: Borrow<Q> + Ord,
     Q: Ord,
 {
-    if let Some(front) = list.front() {
+    if let Some(front) = list.iter().next() {
         if target < (*front).borrow() {
             return 0;
         }
     }
 
-    if let Some(last) = list.back() {
+    if let Some(last) = list.iter().next_back() {
         if target > (*last).borrow() {
             return list.len();
         }
